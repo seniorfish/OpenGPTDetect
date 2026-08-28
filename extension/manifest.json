@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "PPL 热力图",
+  "version": "0.1.0",
+  "description": "配合本地因果语言模型服务测量网页文本困惑度，以低饱和热力图与小字标注提示复杂度，并识别疑似 AI 生成内容。",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "PPL 热力图"
+  },
+  "options_page": "src/options/options.html",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "run_at": "document_idle",
+      "css": ["src/content/style.css"],
+      "js": [
+        "src/shared/defaults.js",
+        "src/shared/storage.js",
+        "src/shared/url-match.js",
+        "src/content/dom-scan.js",
+        "src/content/api-client.js",
+        "src/content/heatmap.js",
+        "src/content/annotate.js",
+        "src/content/viewport.js",
+        "src/content/content.js"
+      ]
+    }
+  ],
+  "commands": {
+    "toggle-enabled": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "开启/关闭 PPL 热力图"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Config / secrets
+.env
+.env.local
+
+# Node
+node_modules/
+editor/dist/
+editor/.vite/
+
+# Build artifacts
+*.zip
+dist/
+
+# Data & outputs
+ppl_output/
+
+# Misc
+*.log
+.DS_Store

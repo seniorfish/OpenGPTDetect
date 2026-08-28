@@ -1,0 +1,190 @@
+/* ---------- 布局 ---------- */
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; margin: 0; }
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: 13px;
+  color: #222;
+  background: #f5f6f8;
+}
+#app { display: flex; flex-direction: column; }
+
+/* ---------- 工具栏 ---------- */
+.toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 6px 10px;
+  background: #fff;
+  border-bottom: 1px solid #e2e4e8;
+}
+.toolbar button {
+  padding: 4px 10px;
+  border: 1px solid #d0d3d9;
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.toolbar button:hover { background: #f0f2f5; }
+.toolbar button:disabled { opacity: 0.55; cursor: default; }
+.toolbar button.primary {
+  background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600;
+}
+.toolbar button.primary:hover { background: #1d4ed8; }
+.toolbar button.danger, .modal button.danger { color: #c02626; }
+.toolbar select, .modal select, .modal input[type="text"], .modal input[type="number"] {
+  padding: 3px 6px;
+  border: 1px solid #d0d3d9;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.toolbar .sep { width: 1px; height: 20px; background: #e2e4e8; margin: 0 4px; }
+.toolbar .chk { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.toolbar .lbl { display: flex; align-items: center; gap: 4px; color: #555; }
+
+/* ---------- 编辑区 ---------- */
+.editor-wrap {
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+  margin: 8px 10px 0;
+  border: 1px solid #e2e4e8;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.editor-wrap .cm-editor { height: 100%; }
+.editor-wrap .cm-editor.cm-focused { outline: none; }
+.editor-wrap .cm-scroller { line-height: 1.7; }
+
+/* 热力图分块 */
+.hm { border-radius: 3px; padding: 1px 0; cursor: default; transition: filter 0.08s; }
+.hm-hover { outline: 1.5px solid rgba(30, 64, 175, 0.55); filter: brightness(0.93); }
+.hm-ignored { font-style: italic; }
+
+/* ---------- 直方图面板 ---------- */
+.histo-panel {
+  margin: 6px 10px 0;
+  padding: 4px 8px 2px;
+  background: #fff;
+  border: 1px solid #e2e4e8;
+  border-radius: 8px 8px 0 0;
+  border-bottom: none;
+}
+.histo-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.histo-title { font-weight: 600; color: #444; margin-right: 6px; }
+.histo-controls button {
+  padding: 2px 8px; font-size: 12px;
+  border: 1px solid #d0d3d9; border-radius: 4px; background: #fff; cursor: pointer;
+}
+.histo-controls button:hover { background: #f0f2f5; }
+.histo-controls select, .histo-controls input[type="number"] {
+  padding: 2px 4px; font-size: 12px; border: 1px solid #d0d3d9; border-radius: 4px;
+}
+.histo-controls input[type="number"] { width: 56px; }
+.window-label { color: #2563eb; font-weight: 600; margin-left: auto; }
+#histogram {
+  width: 100%; height: 84px; display: block; margin-top: 4px;
+  cursor: crosshair; touch-action: none;
+}
+.histo-axis { font-size: 10px; fill: #888; }
+.histo-empty { font-size: 12px; fill: #aaa; }
+.histo-brush { fill: rgba(37, 99, 235, 0.25); stroke: #2563eb; stroke-width: 1; }
+.histo-hint { font-size: 11px; color: #999; padding: 0 0 3px; }
+
+/* ---------- 状态栏 ---------- */
+.statusbar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 3px 10px;
+  background: #fff;
+  border-top: 1px solid #e2e4e8;
+  color: #555;
+  font-size: 12px;
+}
+.statusbar .st { padding: 1px 8px; border-radius: 4px; white-space: nowrap; }
+.statusbar .st:hover { background: #f0f2f5; }
+.statusbar .st.clickable { cursor: pointer; color: #2563eb; }
+.statusbar .st.offline { color: #c02626; }
+
+/* ---------- 提示框 ---------- */
+.ppl-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 340px;
+  padding: 6px 10px;
+  background: rgba(30, 32, 36, 0.94);
+  color: #eee;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.ppl-tooltip .tip-label { font-weight: 600; margin-bottom: 2px; word-break: break-all; }
+.ppl-tooltip .tip-dim { color: #9aa0a6; margin-left: 4px; }
+
+/* ---------- 弹窗 ---------- */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 900;
+}
+.modal {
+  width: min(560px, 92vw);
+  max-height: 84vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+.modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #eee;
+  font-weight: 600;
+}
+.modal-close { border: none; background: none; font-size: 15px; cursor: pointer; color: #888; }
+.modal-body { padding: 12px 14px; }
+.form-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.form-row > label { width: 88px; flex-shrink: 0; color: #555; }
+.form-row input[type="text"] { flex: 1; }
+.form-row input[type="number"] { width: 90px; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.form-actions button, .modal-body button {
+  padding: 4px 12px; border: 1px solid #d0d3d9; border-radius: 5px;
+  background: #fff; cursor: pointer; font-size: 13px;
+}
+.form-actions button.primary, .modal-body button.primary {
+  background: #2563eb; border-color: #2563eb; color: #fff;
+}
+.stops-editor { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.stop-row { display: flex; align-items: center; gap: 8px; }
+.stop-row input[type="number"] { width: 80px; }
+.stop-row input[type="color"] { width: 40px; height: 26px; padding: 0; border: 1px solid #ccc; }
+.preset-row, .ignore-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.preset-row .preset-name { flex: 1; }
+.preset-row input[type="text"] { flex: 1; }
+.ignore-row .ignore-preview { flex: 1; word-break: break-all; }
+.tip-dim { color: #9aa0a6; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  bottom: 46px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: rgba(30, 32, 36, 0.94);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+.toast.warn { background: #b45309; }
+.toast.error { background: #b91c1c; }

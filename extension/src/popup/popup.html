@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>PPL 热力图</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>PPL 热力图</h1>
+      <span id="status-dot" class="dot off" title="服务状态"></span>
+    </header>
+
+    <section class="health">
+      <div id="health-text">检测服务中…</div>
+    </section>
+
+    <label class="row">
+      <input type="checkbox" id="enabled" />
+      <span>启用扩展（当前页）</span>
+    </label>
+
+    <div class="actions">
+      <button id="remeasure">重新测量此页</button>
+      <button id="options">打开设置</button>
+    </div>
+
+    <footer>
+      <span id="model-name"></span>
+    </footer>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

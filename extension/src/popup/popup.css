@@ -1,0 +1,68 @@
+body {
+  width: 280px;
+  margin: 0;
+  font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 6px;
+}
+h1 {
+  font-size: 14px;
+  margin: 0;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot.on {
+  background: #22c55e;
+}
+.dot.off {
+  background: #d1d5db;
+}
+.dot.err {
+  background: #ef4444;
+}
+.health {
+  padding: 4px 12px 8px;
+  color: #6b7280;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #f0f0f0;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #f0f0f0;
+}
+button {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+button:hover {
+  background: #f9fafb;
+}
+footer {
+  padding: 6px 12px;
+  border-top: 1px solid #f0f0f0;
+  color: #9ca3af;
+  font-size: 11px;
+  min-height: 14px;
+}

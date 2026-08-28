@@ -1,67 +1,83 @@
 # OpenGPTDetect
 
-基于**本地大语言模型**的文本困惑度（Perplexity / PPL）分析工具包，包含浏览器插件和前端编辑器。它把文本逐 token 的困惑度算出来，作为一种可解释的"文本复杂度"信号，可辅助识别疑似 AI 生成内容。
+A local-LLM-powered **text perplexity (PPL)** analysis toolkit. It computes per-token perplexity of text as an interpretable "text complexity" signal, which can help spot likely AI-generated content.
 
-后端使用 `llama.cpp`（`llama-cpp-python`），所有推理都在本机完成，文本与结果不出本地。
+Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machine — text and results never leave it.
 
-## 组件
+**Language:** English | [简体中文](README.zh-CN.md)
 
-| 组件 | 位置 | 说明 |
+## Components
+
+| Component | Location | Description |
 |---|---|---|
-| **PPL 分析服务**（后端） | `server/llama.py` | FastAPI + llama.cpp，逐 token NLL / PPL，缓存友好的两步式接口 |
-| **API 协议** | `docs/api.md` | 服务端接口定义、数据模型、字段语义 |
-| **页面编辑器** | `editor/` | Vite + CodeMirror 6 的困惑度文本编辑器，构建为单个 HTML |
-| **Chrome 插件** | `extension/` | MV3 插件，在网页上以热力图 + 标注显示文本困惑度 |
+| **PPL analysis service** (backend) | `server/llama.py` | FastAPI + llama.cpp, per-token NLL / PPL, cache-friendly two-step API |
+| **API contract** | `docs/api.md` | Server interface definitions, data models, field semantics |
+| **Web editor** | `editor/` | CodeMirror 6 perplexity text editor built with Vite, bundled into a single HTML file |
+| **Chrome extension** | `extension/` | MV3 extension that shows page-text perplexity as heatmaps + annotations |
 
+## Architecture
 
-## 快速开始
+```
+Web editor (editor/)     ─┐
+Chrome extension  (extension/) ├─ HTTP/JSON ─► server/llama.py ─► llama.cpp ─► local GGUF model
+curl / scripts           ─┘                (FastAPI, global serialization lock)
+```
 
-### 1. 准备模型
+All four consumers share one API contract — see `docs/api.md`.
 
-下载任意 GGUF 格式的语言模型，推荐 [Qwen3.5-9B](https://huggingface.co/mradermacher/Qwen3.5-9B-Base-GGUF) 或 [Qwen3.5-2B](https://huggingface.co/mradermacher/Qwen3.5-2B-Base-i1-GGUF)(更少显存占用)。
-注意，不同的模型对同一段文本会给出不同的困惑度，通常来说，越大的模型困惑度越低，因此当你切换了模型时，你需要调整一些 PPL 节点。
+## Quick start
 
-### 2. 启动后端服务
+### 1. Get a model
+
+Download any GGUF-format causal language model, e.g. a quantized Qwen or Llama GGUF.
+
+### 2. Start the service
 
 ```bash
 cd server
 pip install -r requirements.txt
-cp .env.example .env        # 然后把 .env 里的 MODEL_PATH 改为你的模型路径
+cp .env.example .env        # then set MODEL_PATH in .env to point at your model
 python llama.py
 ```
 
-后端接口默认运行在 `http://127.0.0.1:8000/`，可以通过 PORT 环境变量修改。
+Once the model is loaded, open `http://127.0.0.1:8000/docs` (Swagger) or verify with curl:
 
-### 3. 使用前端 / 插件
+```bash
+curl -X POST "http://127.0.0.1:8000/ppl" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello, world!"}'
+```
 
-- **页面编辑器**：`cd editor && npm install && npm run dev`，浏览器打开 Vite 提示的地址即可；生产形态是单个 HTML（`npm run build` 产物在 `editor/dist/index.html`）。
-- **Chrome 插件**：`chrome://extensions` → 开启"开发者模式" → "加载已解压的扩展程序" → 选择 `extension/` 目录。插件会扫描当前页面文本并调用本地服务。
+### 3. Use the editor / extension
 
-> 两者都默认连接 `http://127.0.0.1:8000`，服务须先启动。
+- **Web editor:** `cd editor && npm install && npm run dev`, then open the URL Vite prints; the production build is a single HTML file at `editor/dist/index.html` (`npm run build`).
+- **Chrome extension:** `chrome://extensions` → enable "Developer mode" → "Load unpacked" → select the `extension/` directory. It scans the current page and talks to the local service.
 
-## 配置
+> Both default to `http://127.0.0.1:8000` — start the service first.
 
-服务全部配置通过 `server/.env` 或环境变量注入（`MODEL_PATH` 必须设置，其余均有默认值），完整清单见 `docs/api.md` 的"快速开始"一节。`NLL` 计算默认使用 PyTorch 加速（自动选择 cuda / xpu / cpu）；未安装 torch 时自动回退 numpy。
+## Configuration
 
-## 硬件要求与后端选择
+All settings are injected via `server/.env` or environment variables (`MODEL_PATH` is required; everything else has a default). The full list lives in the "Quick start" section of `docs/api.md`. NLL computation uses PyTorch by default (auto-selects cuda / xpu / cpu) and falls back to numpy when torch is absent.
 
-服务分两层，硬件需求由 llama.cpp 的安装后端与 torch 的可选加速共同决定；任何能运行 llama.cpp 的机器（包括纯 CPU）都可以使用，差别只在速度。
+## Hardware and backend choice
 
-- **模型推理层（llama.cpp）**：由 `llama-cpp-python` 的安装方式决定。
-  - PyPI 官方 wheel：Windows / Linux 为 CPU-only，macOS（Apple Silicon）为 Metal。
-  - GPU 加速需换构建：NVIDIA 用 CUDA 构建；Intel 用 SYCL / XPU 构建，需 oneAPI 运行时。
-  - 代码默认 `n_gpu_layers=-1`（尽量把层放入 GPU）；在 CPU-only 构建下无效果，自动回退 CPU。
-- **NLL 后处理层**：`PPL_USE_TORCH=1` 且已安装 torch 时，按 CUDA → XPU → CPU 依次探测可用设备；未安装 torch 或 `PPL_USE_TORCH=0` 时使用 numpy（纯 CPU，单线程分块）。
+The service has two layers; hardware needs are decided by the llama.cpp build and the optional torch acceleration. Any machine that can run llama.cpp (including pure CPU) works — only the speed differs.
 
-> 注意：`/health` 返回的 `nll_backend` 只反映后处理层后端（`torch/*` 或 `numpy`），并不代表 llama.cpp 推理层实际使用的硬件。
+- **Model inference layer (llama.cpp):** determined by how `llama-cpp-python` was installed.
+  - Official PyPI wheels: CPU-only on Windows / Linux, Metal on macOS (Apple Silicon).
+  - GPU acceleration needs a different build: CUDA for NVIDIA, SYCL / XPU for Intel (requires the oneAPI runtime).
+  - The code defaults to `n_gpu_layers=-1` (offload as much as possible); on a CPU-only build it has no effect and falls back to CPU automatically.
+- **NLL post-processing layer:** with `PPL_USE_TORCH=1` and torch installed, it probes CUDA → XPU → CPU in order; without torch (or with `PPL_USE_TORCH=0`) it uses numpy (pure CPU, single-threaded chunks).
 
-## 项目结构
+> Note: the `nll_backend` field in `/health` only reflects the post-processing backend (`torch/*` or `numpy`), not which device the llama.cpp inference layer actually runs on.
+
+## Project layout
 
 ```
-├─ server/          # FastAPI + llama.cpp 服务（llama.py、requirements、.env.example）
-├─ docs/api.md      # API 协议（契约基线：路由、字段、错误码、FAQ）
-├─ editor/          # Vite + CodeMirror 前端
-├─ extension/       # Chrome MV3 插件
+├─ server/          # FastAPI + llama.cpp service (llama.py, requirements, .env.example)
+├─ docs/api.md      # API contract (routes, fields, error codes, FAQ)
+├─ editor/          # Vite + CodeMirror frontend
+├─ extension/       # Chrome MV3 extension
 └─ README.md
 ```
 

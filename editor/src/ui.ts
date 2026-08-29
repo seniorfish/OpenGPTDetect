@@ -3,11 +3,63 @@
 import {
   settings, saveSettings, loadPresets, savePreset, deletePreset, renamePreset,
   presetFromSettings, applyPreset
-} from './store.js'
-import { clamp, fmtNum, escapeHtml, colorForPpl } from './util.js'
+} from './store.ts'
+import { clamp, fmtNum, escapeHtml, colorForPpl } from './util.ts'
+import type { Token, Range, HealthResponse } from './types.ts'
 
-export function createUI(handlers) {
-  const app = document.getElementById('app')
+export type ToastType = 'info' | 'warn' | 'error'
+
+export interface UIHandlers {
+  onAnalyze: (manual: boolean) => void
+  onUndo: () => void
+  onRedo: () => void
+  onAddIgnore: () => void
+  getIgnores: () => Range[]
+  setIgnores: (ranges: Range[]) => void
+  getDocText: () => string
+  onSettingsChanged: () => void
+  onFontChanged: () => void
+  onServerChanged: () => void
+  onAutoRefreshChanged: (on: boolean) => void
+  onResize: () => void
+}
+
+export interface StatusBarStats {
+  charCount: number
+  tokenCount: number | null
+  elapsedMs: number | null
+  health: HealthResponse | null
+  avgNll: number | null
+  avgPpl: number | null
+  coverage: number | null
+  line: number
+  col: number
+}
+
+export interface UI {
+  editorWrap: HTMLElement
+  toast: (msg: string, type?: ToastType) => void
+  openModal: (title: string, buildContent: (body: HTMLElement, close: () => void) => void) => void
+  closeModal: () => void
+  renderHistogram: (tokens: Token[]) => void
+  updateStatusBar: (s: StatusBarStats) => void
+  syncControls: () => void
+  setIgnoreCount: (n: number) => void
+  setBusy: (busy: boolean) => void
+  refreshPresetOptions: () => void
+}
+
+interface HistoScale {
+  x: (ppl: number) => number
+  invX: (px: number) => number
+  lo: number
+  hi: number
+  W: number
+}
+
+export function createUI(handlers: UIHandlers): UI {
+  const $ = <T extends Element>(id: string): T => document.getElementById(id) as unknown as T
+  const app = $<HTMLDivElement>('app')
   app.innerHTML = `
     <div class="toolbar">
       <button id="btn-analyze" class="primary" title="发送全文到后端计算 PPL（Ctrl+Enter）">分析</button>
@@ -75,24 +127,29 @@ export function createUI(handlers) {
     <div class="toast" id="toast" style="display:none"></div>
   `
 
-  const $ = (id) => document.getElementById(id)
   const els = {
-    analyze: $('btn-analyze'), auto: $('chk-auto'), undo: $('btn-undo'), redo: $('btn-redo'),
-    mode: $('sel-mode'), ignore: $('btn-ignore'), ignoreList: $('btn-ignore-list'),
-    ignoreCount: $('ignore-count'), preset: $('sel-preset'), savePreset: $('btn-save-preset'),
-    managePreset: $('btn-manage-preset'), settings: $('btn-settings'),
-    editorWrap: $('editor-wrap'), histoPanel: $('histo-panel'), histogram: $('histogram'),
-    winDown: $('btn-win-down'), winUp: $('btn-win-up'), winTop: $('btn-win-top'),
-    winAll: $('btn-win-all'), winW: $('sel-win-w'), winWInput: $('inp-win-w'),
-    winWLabel: $('win-w-label'), windowLabel: $('window-label'),
-    overlay: $('modal-overlay'), modalBox: $('modal-box'), toast: $('toast'),
-    stChars: $('st-chars'), stTokens: $('st-tokens'), stElapsed: $('st-elapsed'),
-    stBackend: $('st-backend'), stNll: $('st-nll'), stPpl: $('st-ppl'), stCov: $('st-cov'), stPos: $('st-pos')
+    analyze: $<HTMLButtonElement>('btn-analyze'), auto: $<HTMLInputElement>('chk-auto'),
+    undo: $<HTMLButtonElement>('btn-undo'), redo: $<HTMLButtonElement>('btn-redo'),
+    mode: $<HTMLSelectElement>('sel-mode'), ignore: $<HTMLButtonElement>('btn-ignore'),
+    ignoreList: $<HTMLButtonElement>('btn-ignore-list'), ignoreCount: $<HTMLSpanElement>('ignore-count'),
+    preset: $<HTMLSelectElement>('sel-preset'), savePreset: $<HTMLButtonElement>('btn-save-preset'),
+    managePreset: $<HTMLButtonElement>('btn-manage-preset'), settings: $<HTMLButtonElement>('btn-settings'),
+    editorWrap: $<HTMLDivElement>('editor-wrap'), histoPanel: $<HTMLDivElement>('histo-panel'),
+    histogram: $<SVGSVGElement>('histogram'),
+    winDown: $<HTMLButtonElement>('btn-win-down'), winUp: $<HTMLButtonElement>('btn-win-up'),
+    winTop: $<HTMLButtonElement>('btn-win-top'), winAll: $<HTMLButtonElement>('btn-win-all'),
+    winW: $<HTMLSelectElement>('sel-win-w'), winWInput: $<HTMLInputElement>('inp-win-w'),
+    winWLabel: $<HTMLSpanElement>('win-w-label'), windowLabel: $<HTMLSpanElement>('window-label'),
+    overlay: $<HTMLDivElement>('modal-overlay'), modalBox: $<HTMLDivElement>('modal-box'), toast: $<HTMLDivElement>('toast'),
+    stChars: $<HTMLSpanElement>('st-chars'), stTokens: $<HTMLSpanElement>('st-tokens'),
+    stElapsed: $<HTMLSpanElement>('st-elapsed'), stBackend: $<HTMLSpanElement>('st-backend'),
+    stNll: $<HTMLSpanElement>('st-nll'), stPpl: $<HTMLSpanElement>('st-ppl'),
+    stCov: $<HTMLSpanElement>('st-cov'), stPos: $<HTMLSpanElement>('st-pos')
   }
 
   // ---------- Toast ----------
-  let toastTimer = null
-  function toast(msg, type = 'info') {
+  let toastTimer: ReturnType<typeof setTimeout> | undefined
+  function toast(msg: string, type: ToastType = 'info'): void {
     els.toast.textContent = msg
     els.toast.className = `toast ${type}`
     els.toast.style.display = 'block'
@@ -101,14 +158,15 @@ export function createUI(handlers) {
   }
 
   // ---------- 弹窗 ----------
-  function openModal(title, buildContent) {
+  function openModal(title: string, buildContent: (body: HTMLElement, close: () => void) => void): void {
     els.modalBox.innerHTML = `<div class="modal-head"><span>${escapeHtml(title)}</span><button class="modal-close">✕</button></div><div class="modal-body"></div>`
-    const body = els.modalBox.querySelector('.modal-body')
+    const body = els.modalBox.querySelector('.modal-body') as HTMLElement
     buildContent(body, closeModal)
-    els.modalBox.querySelector('.modal-close').onclick = closeModal
+    const closeBtn = els.modalBox.querySelector('.modal-close') as HTMLButtonElement
+    closeBtn.onclick = closeModal
     els.overlay.style.display = 'flex'
   }
-  function closeModal() {
+  function closeModal(): void {
     els.overlay.style.display = 'none'
   }
   els.overlay.addEventListener('mousedown', (e) => {
@@ -116,7 +174,7 @@ export function createUI(handlers) {
   })
 
   // ---------- 预设下拉 ----------
-  function refreshPresetOptions() {
+  function refreshPresetOptions(): void {
     const presets = loadPresets()
     els.preset.innerHTML = '<option value="">（选择方案…）</option>' +
       Object.keys(presets).map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')
@@ -139,9 +197,9 @@ export function createUI(handlers) {
       body.innerHTML = `
         <div class="form-row"><label>方案名称</label><input id="preset-name" type="text" placeholder="例如：我的方案" /></div>
         <div class="form-actions"><button class="primary" id="do-save">保存</button></div>`
-      const input = body.querySelector('#preset-name')
+      const input = body.querySelector('#preset-name') as HTMLInputElement
       input.focus()
-      const doSave = () => {
+      const doSave = (): void => {
         const name = input.value.trim()
         if (!name) return toast('请输入方案名称', 'warn')
         savePreset(name, presetFromSettings(name))
@@ -150,14 +208,15 @@ export function createUI(handlers) {
         close()
         toast(`方案「${name}」已保存`)
       }
-      body.querySelector('#do-save').onclick = doSave
+      const btn = body.querySelector('#do-save') as HTMLButtonElement
+      btn.onclick = doSave
       input.onkeydown = (e) => { if (e.key === 'Enter') doSave() }
     })
   }
 
   els.managePreset.onclick = () => {
     openModal('管理配置方案', (body, close) => {
-      const render = () => {
+      const render = (): void => {
         const presets = loadPresets()
         const names = Object.keys(presets)
         body.innerHTML = names.length
@@ -170,12 +229,12 @@ export function createUI(handlers) {
             </div>`).join('')
           : '<div class="tip-dim">暂无方案</div>'
         body.querySelectorAll('.preset-row').forEach((row) => {
-          const name = row.dataset.name
+          const name = (row as HTMLElement).dataset.name as string
           row.querySelectorAll('button').forEach((btn) => {
             btn.onclick = () => {
               const act = btn.dataset.act
               if (act === 'load') {
-                applyPreset(loadPresets()[name])
+                applyPreset(presets[name])
                 handlers.onSettingsChanged()
                 syncControls()
                 close()
@@ -185,13 +244,13 @@ export function createUI(handlers) {
                 refreshPresetOptions()
                 render()
               } else if (act === 'rename') {
-                const span = row.querySelector('.preset-name')
+                const span = row.querySelector('.preset-name') as HTMLElement
                 const input = document.createElement('input')
                 input.type = 'text'
                 input.value = name
                 span.replaceWith(input)
                 input.focus()
-                const commit = () => {
+                const commit = (): void => {
                   const nn = input.value.trim()
                   if (nn && nn !== name) {
                     renamePreset(name, nn)
@@ -245,27 +304,27 @@ export function createUI(handlers) {
           <button id="stops-reset">恢复中文预设节点</button>
         </div>`
 
-      const urlInp = body.querySelector('#set-url')
-      const styleSel = body.querySelector('#set-style')
-      const opRange = body.querySelector('#set-opacity')
-      const opVal = body.querySelector('#opacity-val')
-      const fsInp = body.querySelector('#set-font-size')
-      const ffInp = body.querySelector('#set-font-family')
-      const stopsEditor = body.querySelector('#stops-editor')
+      const urlInp = body.querySelector('#set-url') as HTMLInputElement
+      const styleSel = body.querySelector('#set-style') as HTMLSelectElement
+      const opRange = body.querySelector('#set-opacity') as HTMLInputElement
+      const opVal = body.querySelector('#opacity-val') as HTMLSpanElement
+      const fsInp = body.querySelector('#set-font-size') as HTMLInputElement
+      const ffInp = body.querySelector('#set-font-family') as HTMLInputElement
+      const stopsEditor = body.querySelector('#stops-editor') as HTMLDivElement
 
       styleSel.value = settings.style
-      opRange.value = settings.opacity
+      opRange.value = String(settings.opacity)
       opVal.textContent = Math.round(settings.opacity * 100) + '%'
-      fsInp.value = settings.fontSize
+      fsInp.value = String(settings.fontSize)
       ffInp.value = settings.fontFamily
 
       urlInp.onchange = () => { settings.serverUrl = urlInp.value.trim() || settings.serverUrl; saveSettings(); handlers.onServerChanged() }
-      styleSel.onchange = () => { settings.style = styleSel.value; saveSettings(); handlers.onSettingsChanged() }
+      styleSel.onchange = () => { settings.style = styleSel.value as typeof settings.style; saveSettings(); handlers.onSettingsChanged() }
       opRange.oninput = () => { settings.opacity = Number(opRange.value); opVal.textContent = Math.round(settings.opacity * 100) + '%'; saveSettings(); handlers.onSettingsChanged() }
       fsInp.onchange = () => { settings.fontSize = clamp(Number(fsInp.value) || 16, 10, 32); saveSettings(); handlers.onFontChanged() }
       ffInp.onchange = () => { settings.fontFamily = ffInp.value.trim() || settings.fontFamily; saveSettings(); handlers.onFontChanged() }
 
-      const renderStops = () => {
+      const renderStops = (): void => {
         stopsEditor.innerHTML = settings.stops
           .map((s, i) => `
             <div class="stop-row" data-i="${i}">
@@ -275,30 +334,35 @@ export function createUI(handlers) {
               <button class="stop-del danger" title="删除节点">✕</button>
             </div>`).join('') + '<button id="stop-add">+ 添加节点</button>'
         stopsEditor.querySelectorAll('.stop-row').forEach((row) => {
-          const i = Number(row.dataset.i)
-          row.querySelector('.stop-ppl').onchange = (e) => {
-            settings.stops[i].ppl = Math.max(0, Number(e.target.value) || 0)
+          const i = Number((row as HTMLElement).dataset.i)
+          const pplInp = row.querySelector('.stop-ppl') as HTMLInputElement
+          const colorInp = row.querySelector('.stop-color') as HTMLInputElement
+          const delBtn = row.querySelector('.stop-del') as HTMLButtonElement
+          pplInp.onchange = () => {
+            settings.stops[i].ppl = Math.max(0, Number(pplInp.value) || 0)
             settings.stops.sort((a, b) => a.ppl - b.ppl)
             saveSettings(); handlers.onSettingsChanged(); renderStops()
           }
-          row.querySelector('.stop-color').oninput = (e) => {
-            settings.stops[i].color = e.target.value
+          colorInp.oninput = () => {
+            settings.stops[i].color = colorInp.value
             saveSettings(); handlers.onSettingsChanged()
           }
-          row.querySelector('.stop-del').onclick = () => {
+          delBtn.onclick = () => {
             if (settings.stops.length <= 1) return toast('至少保留一个节点', 'warn')
             settings.stops.splice(i, 1)
             saveSettings(); handlers.onSettingsChanged(); renderStops()
           }
         })
-        stopsEditor.querySelector('#stop-add').onclick = () => {
+        const addBtn = stopsEditor.querySelector('#stop-add') as HTMLButtonElement
+        addBtn.onclick = () => {
           const last = settings.stops[settings.stops.length - 1]
           settings.stops.push({ ppl: (last ? last.ppl : 10) * 2, color: '#ef4444' })
           saveSettings(); handlers.onSettingsChanged(); renderStops()
         }
       }
       renderStops()
-      body.querySelector('#stops-reset').onclick = () => {
+      const resetBtn = body.querySelector('#stops-reset') as HTMLButtonElement
+      resetBtn.onclick = () => {
         settings.stops = [
           { ppl: 12, color: '#22c55e' }, { ppl: 18, color: '#eab308' },
           { ppl: 50, color: '#ef4444' }, { ppl: 100, color: '#7f1d1d' }
@@ -311,7 +375,7 @@ export function createUI(handlers) {
   // ---------- 忽略清单弹窗 ----------
   els.ignoreList.onclick = () => {
     openModal('忽略清单', (body) => {
-      const render = () => {
+      const render = (): void => {
         const ranges = handlers.getIgnores()
         const docText = handlers.getDocText()
         body.innerHTML = ranges.length
@@ -326,8 +390,9 @@ export function createUI(handlers) {
             }).join('') + '<div class="form-actions"><button id="ignore-clear" class="danger">清空全部</button></div>'
           : '<div class="tip-dim">清单为空。选中文字后点击「忽略选区」即可添加。</div>'
         body.querySelectorAll('.ignore-row button').forEach((btn) => {
-          btn.onclick = () => {
-            const i = Number(btn.dataset.i)
+          const b = btn as HTMLButtonElement
+          b.onclick = () => {
+            const i = Number(b.dataset.i)
             const ranges = handlers.getIgnores().slice()
             ranges.splice(i, 1)
             handlers.setIgnores(ranges)
@@ -335,7 +400,10 @@ export function createUI(handlers) {
           }
         })
         const clearBtn = body.querySelector('#ignore-clear')
-        if (clearBtn) clearBtn.onclick = () => { handlers.setIgnores([]); render() }
+        if (clearBtn) {
+          const btn = clearBtn as HTMLButtonElement
+          btn.onclick = () => { handlers.setIgnores([]); render() }
+        }
       }
       render()
     })
@@ -347,7 +415,7 @@ export function createUI(handlers) {
   els.redo.onclick = () => handlers.onRedo()
   els.mode.value = settings.chunkMode
   els.mode.onchange = () => {
-    settings.chunkMode = els.mode.value
+    settings.chunkMode = els.mode.value as typeof settings.chunkMode
     saveSettings()
     handlers.onSettingsChanged()
   }
@@ -361,9 +429,9 @@ export function createUI(handlers) {
   els.stTokens.onclick = () => handlers.onAnalyze(true)
 
   // ---------- 分层窗口 ----------
-  function winWidth() { return settings.windowWidth }
+  function winWidth(): number { return settings.windowWidth }
 
-  function setWindow(n, m) {
+  function setWindow(n: number, m: number): void {
     settings.windowN = clamp(Math.round(n), 0, 100)
     settings.windowM = clamp(Math.round(m), 0, 100)
     if (settings.windowM < settings.windowN) [settings.windowN, settings.windowM] = [settings.windowM, settings.windowN]
@@ -389,7 +457,7 @@ export function createUI(handlers) {
   els.winW.onchange = () => {
     if (els.winW.value === 'custom') {
       els.winWInput.style.display = ''
-      els.winWInput.value = settings.windowWidth
+      els.winWInput.value = String(settings.windowWidth)
       els.winWInput.focus()
     } else {
       els.winWInput.style.display = 'none'
@@ -397,27 +465,27 @@ export function createUI(handlers) {
     }
   }
   els.winWInput.onchange = () => applyWidth(clamp(Number(els.winWInput.value) || 10, 1, 100))
-  if (els.winW.value === 'custom') { els.winWInput.style.display = ''; els.winWInput.value = settings.windowWidth }
+  if (els.winW.value === 'custom') { els.winWInput.style.display = ''; els.winWInput.value = String(settings.windowWidth) }
 
-  function applyWidth(w) {
+  function applyWidth(w: number): void {
     settings.windowWidth = w
-    els.winWLabel.textContent = w
+    els.winWLabel.textContent = String(w)
     let m = settings.windowN + w
     let n = settings.windowN
     if (m > 100) { m = 100; n = Math.max(0, 100 - w) }
     setWindow(n, m)
   }
-  els.winWLabel.textContent = winWidth()
+  els.winWLabel.textContent = String(winWidth())
 
-  function updateWindowLabel() {
+  function updateWindowLabel(): void {
     els.windowLabel.textContent = `窗口 ${settings.windowN}%–${settings.windowM}%`
   }
   updateWindowLabel()
 
   // ---------- 直方图 ----------
-  let histoData = { arr: [], x: null, domain: null }
+  let histoData: { arr: number[]; x: HistoScale | null } = { arr: [], x: null }
 
-  function renderHistogram(tokens) {
+  function renderHistogram(tokens: Token[]): void {
     const svg = els.histogram
     const W = svg.clientWidth || 800
     const H = svg.clientHeight || 80
@@ -425,13 +493,13 @@ export function createUI(handlers) {
     svg.innerHTML = ''
     const arr = tokens
       .filter((t) => !t.stale && !t.ignored && t.ppl != null)
-      .map((t) => Math.max(t.ppl, 1e-6))
+      .map((t) => Math.max(t.ppl!, 1e-6))
       .sort((a, b) => a - b)
     histoData.arr = arr
     const NS = 'http://www.w3.org/2000/svg'
-    const mk = (tag, attrs) => {
+    const mk = (tag: string, attrs: Record<string, string | number>): SVGElement => {
       const el = document.createElementNS(NS, tag)
-      for (const k in attrs) el.setAttribute(k, attrs[k])
+      for (const k in attrs) el.setAttribute(k, String(attrs[k]))
       return el
     }
     if (!arr.length) {
@@ -446,13 +514,13 @@ export function createUI(handlers) {
     let hi = arr[arr.length - 1]
     if (hi <= lo) hi = lo * 10
     const logLo = Math.log10(lo), logHi = Math.log10(hi)
-    const x = (ppl) =>
+    const x = (ppl: number): number =>
       padL + ((Math.log10(Math.max(ppl, 1e-6)) - logLo) / (logHi - logLo)) * (W - padL - padR)
-    const invX = (px) => Math.pow(10, logLo + ((px - padL) / (W - padL - padR)) * (logHi - logLo))
+    const invX = (px: number): number => Math.pow(10, logLo + ((px - padL) / (W - padL - padR)) * (logHi - logLo))
     histoData.x = { x, invX, lo, hi, W }
 
     const K = Math.min(40, Math.max(10, arr.length))
-    const bins = new Array(K).fill(0)
+    const bins: number[] = new Array(K).fill(0)
     for (const v of arr) {
       const idx = clamp(Math.floor(((Math.log10(v) - logLo) / (logHi - logLo)) * K), 0, K - 1)
       bins[idx]++
@@ -470,14 +538,14 @@ export function createUI(handlers) {
     })
 
     // 分层窗口：窗口外压暗
-    const pAt = (p) => arr[clamp(Math.floor((p / 100) * arr.length), 0, arr.length - 1)]
+    const pAt = (p: number): number => arr[clamp(Math.floor((p / 100) * arr.length), 0, arr.length - 1)]
     const x1 = x(pAt(settings.windowN))
     const x2 = settings.windowM >= 100 ? W - padR : x(pAt(settings.windowM))
     svg.appendChild(mk('rect', { x: padL, y: padT, width: Math.max(0, x1 - padL), height: H - padT - padB, fill: 'rgba(60,60,60,0.35)' }))
     svg.appendChild(mk('rect', { x: x2, y: padT, width: Math.max(0, W - padR - x2), height: H - padT - padB, fill: 'rgba(60,60,60,0.35)' }))
 
     // 轴标签
-    const fmt = (v) => (v >= 1000 ? v.toExponential(1) : Number(v.toFixed(1)).toString())
+    const fmt = (v: number): string => (v >= 1000 ? v.toExponential(1) : Number(v.toFixed(1)).toString())
     const tLo = mk('text', { x: padL, y: H - 3, class: 'histo-axis' })
     tLo.textContent = `PPL ${fmt(lo)}`
     const tHi = mk('text', { x: W - padR, y: H - 3, 'text-anchor': 'end', class: 'histo-axis' })
@@ -487,7 +555,7 @@ export function createUI(handlers) {
   }
 
   // brush：拖拽框选 PPL 区间 → 换算为分位窗口
-  let brush = null
+  let brush: { startX: number; rect: DOMRect; selEl: SVGRectElement | null } | null = null
   els.histogram.addEventListener('pointerdown', (e) => {
     if (settings.chunkMode !== 'token' || !histoData.x || !histoData.arr.length) return
     els.histogram.setPointerCapture(e.pointerId)
@@ -500,14 +568,14 @@ export function createUI(handlers) {
     const x1 = clamp(Math.min(brush.startX, px), 0, brush.rect.width)
     const w = Math.abs(px - brush.startX)
     if (!brush.selEl) {
-      brush.selEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      brush.selEl = document.createElementNS('http://www.w3.org/2000/svg', 'rect') as SVGRectElement
       brush.selEl.setAttribute('class', 'histo-brush')
       els.histogram.appendChild(brush.selEl)
     }
-    brush.selEl.setAttribute('x', x1)
-    brush.selEl.setAttribute('y', 0)
-    brush.selEl.setAttribute('width', w)
-    brush.selEl.setAttribute('height', els.histogram.clientHeight || 80)
+    brush.selEl.setAttribute('x', String(x1))
+    brush.selEl.setAttribute('y', '0')
+    brush.selEl.setAttribute('width', String(w))
+    brush.selEl.setAttribute('height', String(els.histogram.clientHeight || 80))
   })
   els.histogram.addEventListener('pointerup', (e) => {
     if (!brush) return
@@ -530,7 +598,7 @@ export function createUI(handlers) {
   })
 
   // ---------- 状态栏 ----------
-  function updateStatusBar(s) {
+  function updateStatusBar(s: StatusBarStats): void {
     els.stChars.textContent = `字符 ${s.charCount}`
     els.stTokens.textContent = s.tokenCount != null ? `Token ${s.tokenCount}` : 'Token —'
     els.stElapsed.textContent = s.elapsedMs != null ? `耗时 ${Math.round(s.elapsedMs)} ms` : '耗时 —'
@@ -558,17 +626,17 @@ export function createUI(handlers) {
   }
 
   // ---------- 对外 ----------
-  function syncControls() {
+  function syncControls(): void {
     els.mode.value = settings.chunkMode
     els.auto.checked = settings.autoRefresh
     updateWindowLabel()
   }
 
-  function setIgnoreCount(n) {
-    els.ignoreCount.textContent = n
+  function setIgnoreCount(n: number): void {
+    els.ignoreCount.textContent = String(n)
   }
 
-  function setBusy(busy) {
+  function setBusy(busy: boolean): void {
     els.analyze.disabled = busy
     els.analyze.textContent = busy ? '分析中…' : '分析'
   }

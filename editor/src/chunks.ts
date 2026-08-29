@@ -1,4 +1,5 @@
 // ---------- 分块（句子 / 段落）与统计 ----------
+import type { Token, Chunk, Range, ChunkMode, StatResult } from './types.ts'
 
 // 句子分隔符：英文/中文常见标点，以及换行（段落分隔符也算句子边界）
 const SENTENCE_DELIMS = /[.,;:!?。，；：！？、…\n]/
@@ -7,7 +8,7 @@ const SENTENCE_DELIMS = /[.,;:!?。，；：！？、…\n]/
  * 句子分块：以标点或换行为界的连续片段，分隔符合入前一个块。
  * 返回 [{start, end}]（UTF-16 下标，半开区间），覆盖全文，无零宽块。
  */
-export function sentenceChunks(text) {
+export function sentenceChunks(text: string): Range[] {
   const chunks = []
   let start = 0
   for (let i = 0; i < text.length; i++) {
@@ -21,7 +22,7 @@ export function sentenceChunks(text) {
 }
 
 /** 段落分块：按换行切分（换行符本身归入前一段，保证全覆盖） */
-export function paragraphChunks(text) {
+export function paragraphChunks(text: string): Range[] {
   const chunks = []
   let start = 0
   for (let i = 0; i < text.length; i++) {
@@ -35,7 +36,7 @@ export function paragraphChunks(text) {
 }
 
 /** 判断两个半开区间是否相交 */
-export function rangesOverlap(aStart, aEnd, bStart, bEnd) {
+export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
   return aStart < bEnd && bStart < aEnd
 }
 
@@ -43,7 +44,7 @@ export function rangesOverlap(aStart, aEnd, bStart, bEnd) {
  * 给 token 列表标注 ignored 标志（与任一忽略区间相交即忽略）。
  * tokens / ignores 均使用 UTF-16 下标。
  */
-export function markIgnored(tokens, ignores) {
+export function markIgnored(tokens: Token[], ignores: Range[]): Token[] {
   for (const t of tokens) {
     t.ignored = ignores.some((r) => rangesOverlap(t.start, Math.max(t.end, t.start + 1), r.start, r.end))
   }
@@ -54,7 +55,7 @@ export function markIgnored(tokens, ignores) {
  * 对一组 token 求平均 NLL（跳过未测量/脏数据/被忽略/nll 为 null 的 token）。
  * 返回 null 表示没有有效 token。平均 PPL = exp(平均 NLL)，与后端 average_ppl 定义一致。
  */
-export function avgNllOfTokens(tokens) {
+export function avgNllOfTokens(tokens: Token[]): StatResult | null {
   let sum = 0
   let count = 0
   for (const t of tokens) {
@@ -68,7 +69,7 @@ export function avgNllOfTokens(tokens) {
 }
 
 /** 取与区间 [start, end) 相交（或中心落在其中）的 token */
-export function tokensInRange(tokens, start, end) {
+export function tokensInRange(tokens: Token[], start: number, end: number): Token[] {
   return tokens.filter((t) => {
     const ts = t.start
     const te = Math.max(t.end, t.start) // 零宽 token 按点处理
@@ -78,7 +79,7 @@ export function tokensInRange(tokens, start, end) {
 }
 
 /** 分块统计：返回块列表，每块附带平均 PPL 信息（信息为 null 表示无有效测量） */
-export function buildChunks(text, tokens, mode) {
+export function buildChunks(text: string, tokens: Token[], mode: ChunkMode): Chunk[] {
   const ranges = mode === 'paragraph' ? paragraphChunks(text) : sentenceChunks(text)
   return ranges.map((r) => {
     const members = tokensInRange(tokens, r.start, r.end)
@@ -88,11 +89,11 @@ export function buildChunks(text, tokens, mode) {
 }
 
 /** 分层显示：返回按 PPL 升序的可见 token 集合（n% ~ m% 区间） */
-export function visibleTokenSet(tokens, n, m) {
+export function visibleTokenSet(tokens: Token[], n: number, m: number): Set<Token> {
   const measured = tokens
     .filter((t) => !t.stale && !t.ignored && t.ppl != null)
-    .sort((a, b) => a.ppl - b.ppl)
-  const visible = new Set()
+    .sort((a, b) => a.ppl! - b.ppl!)
+  const visible = new Set<Token>()
   const total = measured.length
   measured.forEach((t, i) => {
     const pct = total === 0 ? 0 : (i / total) * 100

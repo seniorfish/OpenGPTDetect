@@ -2,23 +2,24 @@
 // 职责：文本编辑、撤销/重做、热力图装饰层、脏 token 追踪、悬停/选区提示。
 
 import { EditorState, StateField, StateEffect, Prec } from '@codemirror/state'
-import {
-  EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers
-} from '@codemirror/view'
+import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers } from '@codemirror/view'
+import type { ChangeSet, Transaction } from '@codemirror/state'
+import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands'
-import { settings } from './store.js'
-import { rgba, clamp, colorForPpl, escapeHtml } from './util.js'
+import { settings } from './store.ts'
+import { rgba, clamp, colorForPpl, escapeHtml } from './util.ts'
 import {
   buildChunks, markIgnored, visibleTokenSet, avgNllOfTokens, tokensInRange, rangesOverlap
-} from './chunks.js'
+} from './chunks.ts'
+import type { Token, Range as DocRange, PplResponse, StatResult } from './types.ts'
 
 const GRAY = '#8a8a8a' // 未测量/脏数据颜色
 
 // ---------- 状态效果 ----------
-const setTokensEffect = StateEffect.define() // {tokens} 分析结果落地
-const setIgnoresEffect = StateEffect.define() // {ranges:[{start,end}]}
-const setHoverEffect = StateEffect.define() // {key|null}
-const refreshEffect = StateEffect.define() // 配置变化，重建装饰
+const setTokensEffect = StateEffect.define<{ tokens: Token[] }>() // {tokens} 分析结果落地
+const setIgnoresEffect = StateEffect.define<{ ranges: DocRange[] }>() // {ranges:[{start,end}]}
+const setHoverEffect = StateEffect.define<{ key: string | null }>() // {key|null}
+const refreshEffect = StateEffect.define<null>() // 配置变化，重建装饰
 
 // ---------- 编辑引起的 token 映射与脏标记 ----------
 /**
@@ -28,10 +29,10 @@ const refreshEffect = StateEffect.define() // 配置变化，重建装饰
  * - 边界上的插入不影响（如文首插入前缀，"你好" 原样后移）
  * - 区间被删空的 token → 丢弃
  */
-function mapTokensThroughChanges(tokens, changes) {
-  const edits = []
+export function mapTokensThroughChanges(tokens: Token[], changes: ChangeSet): Token[] {
+  const edits: Array<[number, number]> = []
   changes.iterChanges((fromA, toA) => edits.push([fromA, toA]))
-  const out = []
+  const out: Token[] = []
   for (const t of tokens) {
     const zeroWidth = t.end <= t.start
     let stale = t.stale
@@ -51,8 +52,8 @@ function mapTokensThroughChanges(tokens, changes) {
   return out
 }
 
-function mapRangesThroughChanges(ranges, changes) {
-  const out = []
+export function mapRangesThroughChanges(ranges: DocRange[], changes: ChangeSet): DocRange[] {
+  const out: DocRange[] = []
   for (const r of ranges) {
     const s = changes.mapPos(r.start, 1)
     const e = changes.mapPos(r.end, -1)
@@ -61,12 +62,9 @@ function mapRangesThroughChanges(ranges, changes) {
   return out
 }
 
-// 导出供单元测试
-export { mapTokensThroughChanges, mapRangesThroughChanges }
-
 // ---------- 装饰样式 ----------
-function heatStyle(hex) {
-  const parts = []
+function heatStyle(hex: string): string {
+  const parts: string[] = []
   if (settings.style === 'background' || settings.style === 'both') {
     parts.push(`background-color: ${rgba(hex, settings.opacity)}`)
   }
@@ -81,19 +79,19 @@ function heatStyle(hex) {
   return parts.join('; ')
 }
 
-function ignoredStyle() {
+function ignoredStyle(): string {
   return `background-color: ${rgba(GRAY, 0.12)}; border-bottom: 1px dotted ${GRAY}`
 }
 
 // ---------- 装饰构建 ----------
-function buildDeco(state, data) {
+function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null }): DecorationSet {
   const { tokens, ignores, hoverKey } = data
   const text = state.doc.toString()
   if (!text) return Decoration.none
 
   markIgnored(tokens, ignores)
-  const marks = [] // {start,end,cls,style}
-  const addMark = (start, end, cls, style) => {
+  const marks: Array<{ start: number; end: number; cls: string; style: string }> = []
+  const addMark = (start: number, end: number, cls: string, style: string): void => {
     if (end > start) marks.push({ start, end, cls, style })
   }
 
@@ -110,13 +108,13 @@ function buildDeco(state, data) {
       }
       // 分层显示中被过滤掉的 token：不加装饰（隐藏热力图）
     }
-    // 只有“未被任何 token 覆盖的文字”（新输入、未测量）才补灰色；
+    // 只有"未被任何 token 覆盖的文字"（新输入、未测量）才补灰色；
     // 被分层窗口过滤掉的 token 不加任何装饰（不显示热力图，也不是灰色）
-    const covered = tokens
+    const covered: Array<[number, number]> = tokens
       .filter((t) => t.end > t.start)
-      .map((t) => [t.start, t.end])
+      .map((t) => [t.start, t.end] as [number, number])
       .sort((a, b) => a[0] - b[0])
-    const gaps = []
+    const gaps: Array<{ start: number; end: number; cls: string; style: string }> = []
     let cur = 0
     for (const [s, e] of covered) {
       if (s > cur) gaps.push({ start: cur, end: s, cls: 'hm', style: heatStyle(GRAY) })
@@ -151,9 +149,16 @@ function buildDeco(state, data) {
 }
 
 // ---------- 热力图 StateField ----------
-export const hmField = StateField.define({
-  create: () => ({ tokens: [], ignores: [], hoverKey: null, deco: Decoration.none }),
-  update(value, tr) {
+interface HMValue {
+  tokens: Token[]
+  ignores: DocRange[]
+  hoverKey: string | null
+  deco: DecorationSet
+}
+
+export const hmField: StateField<HMValue> = StateField.define<HMValue>({
+  create: (): HMValue => ({ tokens: [], ignores: [], hoverKey: null, deco: Decoration.none }),
+  update(value, tr: Transaction): HMValue {
     let { tokens, ignores, hoverKey } = value
     let rebuild = false
     if (tr.docChanged) {
@@ -182,7 +187,9 @@ export const hmField = StateField.define({
 })
 
 // ---------- 提示框 ----------
-function makeTooltipEl() {
+type Tooltip = { el: HTMLDivElement | null }
+
+function makeTooltipEl(): HTMLDivElement {
   const el = document.createElement('div')
   el.className = 'ppl-tooltip'
   el.style.display = 'none'
@@ -190,24 +197,25 @@ function makeTooltipEl() {
   return el
 }
 
-const hoverTip = { el: null }
-const selTip = { el: null }
+const hoverTip: Tooltip = { el: null }
+const selTip: Tooltip = { el: null }
 
-function showTip(tip, html, x, y) {
+function showTip(tip: Tooltip, html: string, x: number, y: number): void {
   if (!tip.el) tip.el = makeTooltipEl()
-  tip.el.innerHTML = html
-  tip.el.style.display = 'block'
-  const rect = tip.el.getBoundingClientRect()
-  tip.el.style.left = clamp(x - rect.width / 2, 4, window.innerWidth - rect.width - 4) + 'px'
+  const el = tip.el
+  el.innerHTML = html
+  el.style.display = 'block'
+  const rect = el.getBoundingClientRect()
+  el.style.left = clamp(x - rect.width / 2, 4, window.innerWidth - rect.width - 4) + 'px'
   const above = y - rect.height - 10
-  tip.el.style.top = (above > 4 ? above : y + 18) + 'px'
+  el.style.top = (above > 4 ? above : y + 18) + 'px'
 }
 
-function hideTip(tip) {
+function hideTip(tip: Tooltip): void {
   if (tip.el) tip.el.style.display = 'none'
 }
 
-function statHtml(stat) {
+function statHtml(stat: StatResult | null): string {
   if (!stat) return '<span class="tip-dim">未测量（或无有效 Token）</span>'
   return (
     `平均 PPL <b>${stat.ppl < 1000 ? stat.ppl.toPrecision(3) : stat.ppl.toExponential(2)}</b>` +
@@ -217,7 +225,7 @@ function statHtml(stat) {
 }
 
 /** 查询某文档位置在当前分块模式下的统计信息 */
-function infoAtPos(state, pos) {
+function infoAtPos(state: EditorState, pos: number): { key: string; label: string; stat: StatResult | null } | null {
   const { tokens, ignores } = state.field(hmField)
   const text = state.doc.toString()
   if (!text) return null
@@ -226,7 +234,9 @@ function infoAtPos(state, pos) {
     const t = tokens.find((t) => (t.end > t.start ? t.start <= pos && pos < t.end : t.start === pos))
     if (!t) return null
     const suffix = t.ignored ? '（已忽略）' : t.stale ? '（已失效）' : ''
-    const stat = t.ignored || t.stale || t.nll == null ? null : { nll: t.nll, ppl: t.ppl, count: 1 }
+    const stat = t.ignored || t.stale || t.nll == null || t.ppl == null
+      ? null
+      : { nll: t.nll, ppl: t.ppl, count: 1 }
     return { key: `t${t.tokenIndex}`, label: `Token #${t.tokenIndex}「${t.text}」${suffix}`, stat }
   }
   const chunks = buildChunks(text, tokens, settings.chunkMode)
@@ -241,84 +251,111 @@ function infoAtPos(state, pos) {
 }
 
 /** 悬停插件：mousemove 定位分块 → 突出显示 + 弹出 PPL 提示 */
-function buildHoverPlugin() {
-  let pluginRef = null
-  pluginRef = ViewPlugin.fromClass(
-    class {
-      constructor(view) {
-        this.view = view
-        this.key = null
-        this.lastPos = -1
-      }
-      update() {
-        // 文档/配置变化后重新校验当前悬停位置。
-        // 更新周期内不允许同步 dispatch，延迟到周期外执行。
-        if (this.lastPos < 0) return
-        const st = infoAtPos(this.view.state, Math.min(this.lastPos, this.view.state.doc.length))
-        const key = st ? st.key : null
-        if (key !== this.key) {
-          this.key = key
-          const view = this.view
-          setTimeout(() => {
-            if (!view.isDestroyed) view.dispatch({ effects: setHoverEffect.of({ key }) })
-          }, 0)
+class Hover {
+  view: EditorView
+  key: string | null
+  lastPos: number
+
+  constructor(view: EditorView) {
+    this.view = view
+    this.key = null
+    this.lastPos = -1
+  }
+
+  update(): void {
+    // 文档/配置变化后重新校验当前悬停位置。
+    // 更新周期内不允许同步 dispatch，延迟到周期外执行。
+    if (this.lastPos < 0) return
+    const st = infoAtPos(this.view.state, Math.min(this.lastPos, this.view.state.doc.length))
+    const key = st ? st.key : null
+    if (key !== this.key) {
+      this.key = key
+      const view = this.view
+      setTimeout(() => {
+        view.dispatch({ effects: setHoverEffect.of({ key }) })
+      }, 0)
+    }
+  }
+
+  setKey(key: string | null): void {
+    if (key === this.key) return
+    this.key = key
+    this.view.dispatch({ effects: setHoverEffect.of({ key }) })
+  }
+
+  destroy(): void {
+    hideTip(hoverTip)
+  }
+}
+
+function buildHoverPlugin(): ViewPlugin<Hover> {
+  let pluginRef: ViewPlugin<Hover> | null = null
+  pluginRef = ViewPlugin.fromClass(Hover, {
+    eventHandlers: {
+      mousemove(event, view) {
+        const plugin = view.plugin(pluginRef!)
+        if (!plugin) return
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+        if (pos == null) {
+          plugin.lastPos = -1
+          plugin.setKey(null)
+          hideTip(hoverTip)
+          return
         }
-      }
-      setKey(key) {
-        if (key === this.key) return
-        this.key = key
-        this.view.dispatch({ effects: setHoverEffect.of({ key }) })
-      }
-      destroy() {
-        hideTip(hoverTip)
-      }
-    },
-    {
-      eventHandlers: {
-        mousemove(event, view) {
-          const plugin = view.plugin(pluginRef)
-          if (!plugin) return
-          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-          if (pos == null) {
-            plugin.lastPos = -1
-            plugin.setKey(null)
-            hideTip(hoverTip)
-            return
-          }
-          plugin.lastPos = pos
-          const st = infoAtPos(view.state, pos)
-          const key = st ? st.key : null
-          if (key !== plugin.key) plugin.setKey(key)
-          if (st) {
-            showTip(
-              hoverTip,
-              `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
-              event.clientX,
-              event.clientY
-            )
-          } else {
-            hideTip(hoverTip)
-          }
-        },
-        mouseleave(_event, view) {
-          const plugin = view.plugin(pluginRef)
-          if (plugin) {
-            plugin.lastPos = -1
-            plugin.setKey(null)
-          }
+        plugin.lastPos = pos
+        const st = infoAtPos(view.state, pos)
+        const key = st ? st.key : null
+        if (key !== plugin.key) plugin.setKey(key)
+        if (st) {
+          showTip(
+            hoverTip,
+            `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
+            event.clientX,
+            event.clientY
+          )
+        } else {
           hideTip(hoverTip)
         }
+      },
+      mouseleave(_event, view) {
+        const plugin = view.plugin(pluginRef!)
+        if (plugin) {
+          plugin.lastPos = -1
+          plugin.setKey(null)
+        }
+        hideTip(hoverTip)
       }
     }
-  )
+  })
   return pluginRef
 }
 
 // ---------- 对外接口 ----------
-export function createEditor(parent, callbacks) {
+export interface EditorCallbacks {
+  onDocChanged: (update: ViewUpdate) => void
+  onSelectionChanged: (update: ViewUpdate) => void
+  onAnalyze: () => void
+}
+
+export interface EditorApi {
+  view: EditorView
+  /** 分析结果落地：把后端 token_details 转换为内部 token（UTF-16 下标）并刷新装饰 */
+  applyAnalysis: (data: PplResponse, cpMap: number[]) => void
+  /** 配置变化后重建装饰（颜色/样式/分块模式/分层窗口等） */
+  refreshDecorations: () => void
+  getTokens: () => Token[]
+  getIgnores: () => DocRange[]
+  setIgnores: (ranges: DocRange[]) => void
+  addIgnore: (start: number, end: number) => void
+  undo: () => void
+  redo: () => void
+  applyFonts: () => void
+}
+
+export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): EditorApi {
   const { onDocChanged, onSelectionChanged } = callbacks
 
-  function handleSelectionTooltip(v) {
+  function handleSelectionTooltip(v: EditorView): void {
     const sel = v.state.selection.main
     if (sel.empty) {
       hideTip(selTip)
@@ -333,7 +370,7 @@ export function createEditor(parent, callbacks) {
     showTip(selTip, html, (coords.left + coords.right) / 2, coords.top)
   }
 
-  const updateListener = EditorView.updateListener.of((update) => {
+  const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {
     if (update.docChanged) {
       onDocChanged(update)
     }
@@ -375,15 +412,15 @@ export function createEditor(parent, callbacks) {
   const view = new EditorView({ state, parent })
   applyFonts(view)
 
-  const api = {
+  const api: EditorApi = {
     view,
 
     /** 分析结果落地：把后端 token_details 转换为内部 token（UTF-16 下标）并刷新装饰 */
     applyAnalysis(data, cpMap) {
-      const tokens = []
+      const tokens: Token[] = []
       for (const d of data.token_details) {
-        let start = d.char_start == null ? null : cpMap[d.char_start]
-        let end = d.char_end == null ? null : cpMap[d.char_end]
+        let start: number | null = d.char_start == null ? null : cpMap[d.char_start]
+        let end: number | null = d.char_end == null ? null : cpMap[d.char_end]
         if (start == null || end == null) {
           // 无法对齐的 token：零宽，挂在前一个 token 末尾
           start = end = tokens.length ? tokens[tokens.length - 1].end : 0
@@ -403,7 +440,6 @@ export function createEditor(parent, callbacks) {
       view.dispatch({ effects: setTokensEffect.of({ tokens }) })
     },
 
-    /** 配置变化后重建装饰（颜色/样式/分块模式/分层窗口等） */
     refreshDecorations() {
       view.dispatch({ effects: refreshEffect.of(null) })
     },
@@ -425,15 +461,21 @@ export function createEditor(parent, callbacks) {
       api.setIgnores([...cur, { start, end }].sort((a, b) => a.start - b.start))
     },
 
-    undo: () => undo(view),
-    redo: () => redo(view),
+    undo() {
+      undo(view)
+    },
+    redo() {
+      redo(view)
+    },
 
-    applyFonts: () => applyFonts(view)
+    applyFonts() {
+      applyFonts(view)
+    }
   }
   return api
 }
 
-export function applyFonts(view) {
+export function applyFonts(view: EditorView): void {
   view.contentDOM.style.fontSize = settings.fontSize + 'px'
   view.contentDOM.style.fontFamily = settings.fontFamily
   view.scrollDOM.style.fontFamily = settings.fontFamily

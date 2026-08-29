@@ -1,20 +1,30 @@
 // ---------- 入口：装配编辑器、UI 与分析流程 ----------
 
 import './style.css'
-import { createEditor } from './editor.js'
-import { createUI } from './ui.js'
-import { createApi } from './api.js'
-import { settings, saveSettings } from './store.js'
-import { hashText, buildCpToUtf16Map, debounce } from './util.js'
-import { markIgnored, avgNllOfTokens } from './chunks.js'
+import { createEditor } from './editor.ts'
+import { createUI } from './ui.ts'
+import { createApi } from './api.ts'
+import { settings, saveSettings } from './store.ts'
+import { hashText, buildCpToUtf16Map, debounce } from './util.ts'
+import { markIgnored, avgNllOfTokens } from './chunks.ts'
+import type { HealthResponse } from './types.ts'
 
-const state = {
-  health: null, // /health 返回，null = 离线
-  elapsedMs: null, // 上次 PPL 计算耗时
-  tokenCount: null, // 上次分析的 token 数
-  inFlight: false, // 是否有请求在飞
-  pendingAnalyze: false, // 在飞期间是否又有新的分析需求
-  maxChars: 2200 // 后端字符上限（默认，健康检查后更新）
+interface MainState {
+  health: HealthResponse | null // /health 返回，null = 离线
+  elapsedMs: number | null // 上次 PPL 计算耗时
+  tokenCount: number | null // 上次分析的 token 数
+  inFlight: boolean // 是否有请求在飞
+  pendingAnalyze: boolean // 在飞期间是否又有新的分析需求
+  maxChars: number // 后端字符上限（默认，健康检查后更新）
+}
+
+const state: MainState = {
+  health: null,
+  elapsedMs: null,
+  tokenCount: null,
+  inFlight: false,
+  pendingAnalyze: false,
+  maxChars: 2200
 }
 
 const api = createApi(() => settings.serverUrl)
@@ -55,7 +65,7 @@ const editor = createEditor(ui.editorWrap, {
 })
 
 // ---------- 分析流程 ----------
-async function analyze(manual = false) {
+async function analyze(manual = false): Promise<void> {
   const text = editor.view.state.doc.toString()
   if (!text.trim()) {
     if (manual) ui.toast('文本为空，无法分析', 'warn')
@@ -89,8 +99,9 @@ async function analyze(manual = false) {
     refreshDerived()
     if (state.health == null) checkHealth()
   } catch (err) {
-    if (err.status) {
-      ui.toast(`分析失败：${err.message}`, 'error')
+    const maybe = err as { status?: number; message?: string } | null
+    if (maybe?.status) {
+      ui.toast(`分析失败：${maybe.message}`, 'error')
     } else {
       ui.toast(`无法连接后端 ${settings.serverUrl}`, 'error')
       state.health = null
@@ -109,7 +120,7 @@ async function analyze(manual = false) {
 const scheduleAutoAnalyze = debounce(() => analyze(false), 800)
 
 // ---------- 忽略清单 ----------
-function addIgnoreFromSelection() {
+function addIgnoreFromSelection(): void {
   const sel = editor.view.state.selection.main
   if (sel.empty) {
     ui.toast('请先选中要忽略的文字', 'warn')
@@ -122,12 +133,12 @@ function addIgnoreFromSelection() {
 }
 
 // ---------- 派生数据刷新（直方图 / 状态栏） ----------
-function refreshDerived() {
+function refreshDerived(): void {
   ui.renderHistogram(editor.getTokens())
   updateStatusBar()
 }
 
-function updateStatusBar() {
+function updateStatusBar(): void {
   const doc = editor.view.state.doc
   const text = doc.toString()
   const tokens = editor.getTokens()
@@ -155,14 +166,14 @@ function updateStatusBar() {
 }
 
 // ---------- 健康检查 ----------
-async function checkHealth() {
+async function checkHealth(): Promise<void> {
   const h = await api.health()
   state.health = h
   if (h && h.max_char_count) state.maxChars = h.max_char_count
   updateStatusBar()
 }
-checkHealth()
-setInterval(checkHealth, 15000)
+void checkHealth()
+setInterval(() => void checkHealth(), 15000)
 
 // ---------- 初始化 ----------
 ui.syncControls()

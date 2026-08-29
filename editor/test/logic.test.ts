@@ -1,12 +1,14 @@
-// 纯逻辑无头测试：node test/logic.test.mjs
+// 纯逻辑无头测试：node test/logic.test.ts
 import assert from 'node:assert'
 import { EditorState } from '@codemirror/state'
-import { sentenceChunks, paragraphChunks, avgNllOfTokens, visibleTokenSet, tokensInRange } from '../src/chunks.js'
-import { colorForPpl, hashText, buildCpToUtf16Map } from '../src/util.js'
-import { mapTokensThroughChanges, mapRangesThroughChanges } from '../src/editor.js'
+import type { ChangeSet } from '@codemirror/state'
+import { sentenceChunks, paragraphChunks, avgNllOfTokens, visibleTokenSet, tokensInRange } from '../src/chunks.ts'
+import { colorForPpl, hashText, buildCpToUtf16Map } from '../src/util.ts'
+import { mapTokensThroughChanges, mapRangesThroughChanges } from '../src/editor.ts'
+import type { Token } from '../src/types.ts'
 
 let passed = 0
-function ok(name, fn) {
+function ok(name: string, fn: () => void): void {
   fn()
   passed++
   console.log('✓', name)
@@ -52,21 +54,22 @@ ok('颜色：节点间渐变', () => {
 
 // ---------- 统计 ----------
 ok('平均 NLL：跳过脏/忽略/null', () => {
-  const tokens = [
-    { nll: 1, ppl: Math.E, stale: false, ignored: false },
-    { nll: 3, ppl: 20, stale: false, ignored: false },
-    { nll: 100, ppl: 1e30, stale: true, ignored: false },
-    { nll: 100, ppl: 1e30, stale: false, ignored: true },
-    { nll: null, ppl: null, stale: false, ignored: false }
+  const tokens: Token[] = [
+    { tokenIndex: 0, tokenId: 0, text: 'a', nll: 1, ppl: Math.E, start: 0, end: 1, stale: false, ignored: false },
+    { tokenIndex: 1, tokenId: 1, text: 'b', nll: 3, ppl: 20, start: 1, end: 2, stale: false, ignored: false },
+    { tokenIndex: 2, tokenId: 2, text: 'c', nll: 100, ppl: 1e30, start: 2, end: 3, stale: true, ignored: false },
+    { tokenIndex: 3, tokenId: 3, text: 'd', nll: 100, ppl: 1e30, start: 3, end: 4, stale: false, ignored: true },
+    { tokenIndex: 4, tokenId: 4, text: 'e', nll: null, ppl: null, start: 4, end: 5, stale: false, ignored: false }
   ]
   const stat = avgNllOfTokens(tokens)
-  assert.strictEqual(stat.count, 2)
-  assert.strictEqual(stat.nll, 2)
+  assert.strictEqual(stat && stat.count, 2)
+  assert.strictEqual(stat && stat.nll, 2)
 })
 
 ok('分层显示：n%-m% 区间', () => {
-  const tokens = Array.from({ length: 10 }, (_, i) => ({
-    tokenIndex: i, ppl: (i + 1) * 10, nll: 1, stale: false, ignored: false
+  const tokens: Token[] = Array.from({ length: 10 }, (_, i) => ({
+    tokenIndex: i, tokenId: i, text: String(i), nll: 1, ppl: (i + 1) * 10,
+    stale: false, ignored: false, start: i, end: i + 1
   }))
   assert.strictEqual(visibleTokenSet(tokens, 0, 100).size, 10)
   assert.strictEqual(visibleTokenSet(tokens, 0, 10).size, 1) // 最低 10%
@@ -90,12 +93,12 @@ ok('码点→UTF-16 映射：emoji 占 2 码元', () => {
 })
 
 // ---------- 脏标记（需求 6 的场景） ----------
-function changeOf(doc, spec) {
+function changeOf(doc: string, spec: { from: number; insert?: string; to?: number }): ChangeSet {
   const state = EditorState.create({ doc })
   return state.update({ changes: spec }).changes
 }
 
-const tk = (start, end, extra = {}) => ({
+const tk = (start: number, end: number, extra: Partial<Token> = {}): Token => ({
   tokenIndex: 0, tokenId: 1, text: 'x', nll: 1, ppl: 2, stale: false, ignored: false, start, end, ...extra
 })
 

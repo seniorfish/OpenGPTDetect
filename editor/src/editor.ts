@@ -88,25 +88,13 @@ function contentOrigin(view: EditorView): { left: number; top: number } {
   }
 }
 
-/** Break rectangles exposed for hover lookup (client coordinates). */
-let breakHoverAreas: Array<{ pos: number; left: number; right: number; top: number; bottom: number }> = []
-
-/** Newline pos currently hovered (drives the '¶' outline), or null. */
-let hoveredBreakPos: number | null = null
-
-/** Toggle the hover outline class on the matching '¶' glyph in the overlay. */
-function setBreakHover(pos: number | null): void {
-  if (pos === hoveredBreakPos) return
-  const layer = document.querySelector('.cm-break-layer')
-  if (layer) {
-    if (hoveredBreakPos != null) {
-      layer.querySelector(`.cm-br[data-br="${hoveredBreakPos}"]`)?.classList.remove('cm-br-hover')
-    }
-  }
-  hoveredBreakPos = pos
-  if (layer && pos != null) {
-    layer.querySelector(`.cm-br[data-br="${pos}"]`)?.classList.add('cm-br-hover')
-  }
+/** A newline-glyph hit region, in client coordinates, used for hover lookup. */
+interface BreakHoverArea {
+  pos: number
+  left: number
+  right: number
+  top: number
+  bottom: number
 }
 
 interface CoverageResult {
@@ -184,9 +172,10 @@ function computeCoverage(
 }
 
 /** Rebuild the break overlay DOM for the current view state. */
-function redrawBreakOverlay(view: EditorView, dom: HTMLElement): void {
+function redrawBreakOverlay(overlay: BreakOverlay): void {
+  const { view, dom } = overlay
   try {
-    breakHoverAreas = []
+    overlay.hoverAreas = []
     const field = view.state.field(hmField)
     const { breaks } = computeCoverage(view.state, field.tokens, field.ignores, null)
     const base = contentOrigin(view)
@@ -198,7 +187,7 @@ function redrawBreakOverlay(view: EditorView, dom: HTMLElement): void {
       keep.add(key)
       // The glyph is drawn from the caret slot rightwards; keep the hover hit
       // area wide enough for the visible '¶'.
-      breakHoverAreas.push({ pos: b.pos, left: rect.left - 3, right: rect.left + 16, top: rect.top, bottom: rect.bottom })
+      overlay.hoverAreas.push({ pos: b.pos, left: rect.left - 3, right: rect.left + 16, top: rect.top, bottom: rect.bottom })
       let el = dom.querySelector<HTMLElement>(`.cm-br[data-br="${key}"]`)
       if (!el) {
         el = document.createElement('div')
@@ -208,7 +197,7 @@ function redrawBreakOverlay(view: EditorView, dom: HTMLElement): void {
         dom.appendChild(el)
       }
       el.setAttribute('style', `${b.style}; left: ${rect.left - base.left}px; top: ${rect.top - base.top}px; height: ${rect.bottom - rect.top}px`)
-      el.classList.toggle('cm-br-hover', hoveredBreakPos === b.pos)
+      el.classList.toggle('cm-br-hover', overlay.hoveredBreakPos === b.pos)
     }
     for (const ch of [...dom.children]) {
       if (!keep.has((ch as HTMLElement).dataset.br ?? '')) ch.remove()
@@ -221,11 +210,19 @@ function redrawBreakOverlay(view: EditorView, dom: HTMLElement): void {
 /**
  * Self-managed overlay for newline glyphs. Redrawn on every edit/analysis/setting
  * change and on scroll, and kept fully pointer-transparent, so caret and selection
- * semantics of the code editor are untouched.
+ * semantics of the code editor are untouched. The per-view instance also owns the
+ * break-hover state and the hover/selection tooltip elements, so they live and die
+ * with the view.
  */
 class BreakOverlay {
   view: EditorView
   dom: HTMLDivElement
+  /** Break rectangles exposed for hover lookup (client coordinates). */
+  hoverAreas: BreakHoverArea[] = []
+  /** Newline pos currently hovered (drives the '¶' outline), or null. */
+  hoveredBreakPos: number | null = null
+  hoverTip: Tooltip = { el: null }
+  selTip: Tooltip = { el: null }
 
   constructor(view: EditorView) {
     this.view = view
@@ -234,6 +231,18 @@ class BreakOverlay {
     view.scrollDOM.appendChild(this.dom)
     view.scrollDOM.addEventListener('scroll', this.redraw)
     requestAnimationFrame(() => this.redraw())
+  }
+
+  /** Toggle the hover outline class on the matching '¶' glyph in this overlay. */
+  setBreakHover(pos: number | null): void {
+    if (pos === this.hoveredBreakPos) return
+    if (this.hoveredBreakPos != null) {
+      this.dom.querySelector(`.cm-br[data-br="${this.hoveredBreakPos}"]`)?.classList.remove('cm-br-hover')
+    }
+    this.hoveredBreakPos = pos
+    if (pos != null) {
+      this.dom.querySelector(`.cm-br[data-br="${pos}"]`)?.classList.add('cm-br-hover')
+    }
   }
 
   update(update: ViewUpdate): void {
@@ -245,19 +254,19 @@ class BreakOverlay {
     ) {
       // Reading the layout is not allowed inside an update cycle; defer the
       // redraw to the next animation frame so coordsAtPos is valid.
-      const view = this.view
-      const dom = this.dom
-      requestAnimationFrame(() => redrawBreakOverlay(view, dom))
+      requestAnimationFrame(() => redrawBreakOverlay(this))
     }
   }
 
   redraw = (): void => {
-    redrawBreakOverlay(this.view, this.dom)
+    redrawBreakOverlay(this)
   }
 
   destroy(): void {
     this.view.scrollDOM.removeEventListener('scroll', this.redraw)
     this.dom.remove()
+    removeTipEl(this.hoverTip)
+    removeTipEl(this.selTip)
   }
 }
 
@@ -329,9 +338,6 @@ function makeTooltipEl(): HTMLDivElement {
   return el
 }
 
-const hoverTip: Tooltip = { el: null }
-const selTip: Tooltip = { el: null }
-
 function showTip(tip: Tooltip, html: string, x: number, y: number): void {
   if (!tip.el) tip.el = makeTooltipEl()
   const el = tip.el
@@ -345,6 +351,14 @@ function showTip(tip: Tooltip, html: string, x: number, y: number): void {
 
 function hideTip(tip: Tooltip): void {
   if (tip.el) tip.el.style.display = 'none'
+}
+
+/** Drop the tooltip element owned by a view (called when the view is destroyed). */
+function removeTipEl(tip: Tooltip): void {
+  if (tip.el) {
+    tip.el.remove()
+    tip.el = null
+  }
 }
 
 function statHtml(stat: StatResult | null): string {
@@ -445,7 +459,8 @@ class Hover {
   }
 
   destroy(): void {
-    hideTip(hoverTip)
+    const overlay = this.view.plugin(breakOverlayPlugin)
+    if (overlay) hideTip(overlay.hoverTip)
   }
 }
 
@@ -456,10 +471,12 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
       mousemove(event, view) {
         const plugin = view.plugin(pluginRef!)
         if (!plugin) return
+        const overlay = view.plugin(breakOverlayPlugin)
+        if (!overlay) return
 
         // Newline overlay hover: if the pointer sits on a break glyph rectangle,
         // show that break's covering chunk (same info as any other position).
-        const brHit = breakHoverAreas.find(
+        const brHit = overlay.hoverAreas.find(
           (a) =>
             event.clientX >= a.left - 2 &&
             event.clientX <= a.right + 2 &&
@@ -468,31 +485,31 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
         )
         if (brHit) {
           plugin.lastPos = -1 // overlay hover does not track a plain pos
-          setBreakHover(brHit.pos)
+          overlay.setBreakHover(brHit.pos)
           const st = infoAtPos(view.state, brHit.pos)
           const key = st ? st.key : null
           if (key !== plugin.key) plugin.setKey(key)
           if (st) {
             showTip(
-              hoverTip,
+              overlay.hoverTip,
               `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
               event.clientX,
               event.clientY
             )
           } else {
-            hideTip(hoverTip)
+            hideTip(overlay.hoverTip)
           }
           return
         }
 
-        setBreakHover(null)
+        overlay.setBreakHover(null)
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
         if (pos == null || !isPointerOnText(view, pos, event.clientX, event.clientY)) {
           // Pointer over empty margin (line start/end whitespace, blank line):
           // nothing measurable is under the cursor, so suppress the tooltip.
           plugin.lastPos = -1
           plugin.setKey(null)
-          hideTip(hoverTip)
+          hideTip(overlay.hoverTip)
           return
         }
         plugin.lastPos = pos
@@ -501,13 +518,13 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
         if (key !== plugin.key) plugin.setKey(key)
         if (st) {
           showTip(
-            hoverTip,
+            overlay.hoverTip,
             `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
             event.clientX,
             event.clientY
           )
         } else {
-          hideTip(hoverTip)
+          hideTip(overlay.hoverTip)
         }
       },
       mouseleave(_event, view) {
@@ -516,8 +533,11 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
           plugin.lastPos = -1
           plugin.setKey(null)
         }
-        setBreakHover(null)
-        hideTip(hoverTip)
+        const overlay = view.plugin(breakOverlayPlugin)
+        if (overlay) {
+          overlay.setBreakHover(null)
+          hideTip(overlay.hoverTip)
+        }
       }
     }
   })
@@ -550,9 +570,11 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
   const { onDocChanged, onSelectionChanged } = callbacks
 
   function handleSelectionTooltip(v: EditorView): void {
+    const overlay = v.plugin(breakOverlayPlugin)
+    if (!overlay) return
     const sel = v.state.selection.main
     if (sel.empty) {
-      hideTip(selTip)
+      hideTip(overlay.selTip)
       return
     }
     const { tokens, ignores } = v.state.field(hmField)
@@ -561,7 +583,7 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
     const html = `<div class="tip-label">${t('tooltip.selection', { chars: sel.to - sel.from })}</div>${statHtml(stat)}`
     const coords = v.coordsAtPos(sel.head) || v.coordsAtPos(sel.from)
     if (!coords) return
-    showTip(selTip, html, (coords.left + coords.right) / 2, coords.top)
+    showTip(overlay.selTip, html, (coords.left + coords.right) / 2, coords.top)
   }
 
   const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {

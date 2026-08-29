@@ -454,6 +454,78 @@ class Hover {
     this.lastPos = -1
   }
 
+  // Mouse handlers live here as bound methods; ViewPlugin's eventHandlers invoke
+  // them with `this` set to this plugin instance, so no self-reference lookup is
+  // needed inside the handlers.
+  handleMouseMove = (event: MouseEvent): void => {
+    const overlay = this.view.plugin(breakOverlayPlugin)
+    if (!overlay) return
+
+    // Newline overlay hover: if the pointer sits on a break glyph rectangle,
+    // show that break's covering chunk (same info as any other position).
+    const brHit = overlay.hoverAreas.find(
+      (a) =>
+        event.clientX >= a.left - 2 &&
+        event.clientX <= a.right + 2 &&
+        event.clientY >= a.top &&
+        event.clientY <= a.bottom
+    )
+    if (brHit) {
+      this.lastPos = -1 // overlay hover does not track a plain pos
+      overlay.setBreakHover(brHit.pos)
+      const st = infoAtPos(this.view.state, brHit.pos)
+      const key = st ? st.key : null
+      if (key !== this.key) this.setKey(key)
+      if (st) {
+        showTip(
+          overlay.hoverTip,
+          `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
+          event.clientX,
+          event.clientY
+        )
+      } else {
+        hideTip(overlay.hoverTip)
+      }
+      return
+    }
+
+    overlay.setBreakHover(null)
+    const view = this.view
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    if (pos == null || !isPointerOnText(view, pos, event.clientX, event.clientY)) {
+      // Pointer over empty margin (line start/end whitespace, blank line):
+      // nothing measurable is under the cursor, so suppress the tooltip.
+      this.lastPos = -1
+      this.setKey(null)
+      hideTip(overlay.hoverTip)
+      return
+    }
+    this.lastPos = pos
+    const st = infoAtPos(view.state, pos)
+    const key = st ? st.key : null
+    if (key !== this.key) this.setKey(key)
+    if (st) {
+      showTip(
+        overlay.hoverTip,
+        `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
+        event.clientX,
+        event.clientY
+      )
+    } else {
+      hideTip(overlay.hoverTip)
+    }
+  }
+
+  handleMouseLeave = (): void => {
+    this.lastPos = -1
+    this.setKey(null)
+    const overlay = this.view.plugin(breakOverlayPlugin)
+    if (overlay) {
+      overlay.setBreakHover(null)
+      hideTip(overlay.hoverTip)
+    }
+  }
+
   update(): void {
     // Re-validate the hovered position after document/setting changes.
     // Synchronous dispatch is not allowed inside an update cycle; defer to the next tick.
@@ -482,83 +554,18 @@ class Hover {
 }
 
 function buildHoverPlugin(): ViewPlugin<Hover> {
-  let pluginRef: ViewPlugin<Hover> | null = null
-  pluginRef = ViewPlugin.fromClass(Hover, {
+  return ViewPlugin.fromClass(Hover, {
     eventHandlers: {
-      mousemove(event, view) {
-        const plugin = view.plugin(pluginRef!)
-        if (!plugin) return
-        const overlay = view.plugin(breakOverlayPlugin)
-        if (!overlay) return
-
-        // Newline overlay hover: if the pointer sits on a break glyph rectangle,
-        // show that break's covering chunk (same info as any other position).
-        const brHit = overlay.hoverAreas.find(
-          (a) =>
-            event.clientX >= a.left - 2 &&
-            event.clientX <= a.right + 2 &&
-            event.clientY >= a.top &&
-            event.clientY <= a.bottom
-        )
-        if (brHit) {
-          plugin.lastPos = -1 // overlay hover does not track a plain pos
-          overlay.setBreakHover(brHit.pos)
-          const st = infoAtPos(view.state, brHit.pos)
-          const key = st ? st.key : null
-          if (key !== plugin.key) plugin.setKey(key)
-          if (st) {
-            showTip(
-              overlay.hoverTip,
-              `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
-              event.clientX,
-              event.clientY
-            )
-          } else {
-            hideTip(overlay.hoverTip)
-          }
-          return
-        }
-
-        overlay.setBreakHover(null)
-        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-        if (pos == null || !isPointerOnText(view, pos, event.clientX, event.clientY)) {
-          // Pointer over empty margin (line start/end whitespace, blank line):
-          // nothing measurable is under the cursor, so suppress the tooltip.
-          plugin.lastPos = -1
-          plugin.setKey(null)
-          hideTip(overlay.hoverTip)
-          return
-        }
-        plugin.lastPos = pos
-        const st = infoAtPos(view.state, pos)
-        const key = st ? st.key : null
-        if (key !== plugin.key) plugin.setKey(key)
-        if (st) {
-          showTip(
-            overlay.hoverTip,
-            `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
-            event.clientX,
-            event.clientY
-          )
-        } else {
-          hideTip(overlay.hoverTip)
-        }
+      // CodeMirror calls eventHandlers with `this` bound to the plugin instance,
+      // so the bound class methods need no pluginRef lookup or non-null assertion.
+      mousemove(this: Hover, event: MouseEvent) {
+        this.handleMouseMove(event)
       },
-      mouseleave(_event, view) {
-        const plugin = view.plugin(pluginRef!)
-        if (plugin) {
-          plugin.lastPos = -1
-          plugin.setKey(null)
-        }
-        const overlay = view.plugin(breakOverlayPlugin)
-        if (overlay) {
-          overlay.setBreakHover(null)
-          hideTip(overlay.hoverTip)
-        }
+      mouseleave(this: Hover) {
+        this.handleMouseLeave()
       }
     }
   })
-  return pluginRef
 }
 
 // ---------- Public interface ----------

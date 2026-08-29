@@ -1,10 +1,11 @@
+[English](README.md) | 简体中文
+
 # OpenGPTDetect
 
 基于**本地大语言模型**的文本困惑度（Perplexity / PPL）分析工具包。它把文本逐 token 的困惑度算出来，作为一种可解释的"文本复杂度"信号，可辅助识别疑似 AI 生成内容。
 
 后端使用 `llama.cpp`（`llama-cpp-python`），所有推理都在本机完成，文本与结果不出本地。
 
-**语言：** [English](README.md) | 简体中文
 
 ## 组件
 
@@ -58,6 +59,8 @@ curl -X POST "http://127.0.0.1:8000/ppl" \
 ## 配置
 
 服务全部配置通过 `server/.env` 或环境变量注入（`MODEL_PATH` 必须设置，其余均有默认值），完整清单见 `docs/api.md` 的"快速开始"一节。`NLL` 计算默认使用 PyTorch 加速（自动选择 cuda / xpu / cpu）；未安装 torch 时自动回退 numpy。
+
+`BACKEND=mock` 可启动一个无需模型的演示后端，返回确定性伪 NLL——**仅供测试与前端开发**，切勿用于真实分析；服务一旦处于该模式会打印警告。
 
 ## 硬件要求与后端选择
 

@@ -1,10 +1,11 @@
+English | [简体中文](README.zh-CN.md)
+
 # OpenGPTDetect
 
 A local-LLM-powered **text perplexity (PPL)** analysis toolkit. It computes per-token perplexity of text as an interpretable "text complexity" signal, which can help spot likely AI-generated content.
 
 Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machine — text and results never leave it.
 
-**Language:** English | [简体中文](README.zh-CN.md)
 
 ## Components
 
@@ -58,6 +59,8 @@ curl -X POST "http://127.0.0.1:8000/ppl" \
 ## Configuration
 
 All settings are injected via `server/.env` or environment variables (`MODEL_PATH` is required; everything else has a default). The full list lives in the "Quick start" section of `docs/api.md`. NLL computation uses PyTorch by default (auto-selects cuda / xpu / cpu) and falls back to numpy when torch is absent.
+
+`BACKEND=mock` starts a model-free demo server that returns deterministic pseudo-NLL — intended for tests and frontend development **only**, never for real analysis; the service prints a warning whenever it is active.
 
 ## Hardware and backend choice
 

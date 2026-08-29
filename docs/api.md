@@ -215,7 +215,7 @@ Read from environment variables or a `server/.env` file (`python-dotenv`); all o
 | `FLASH_ATTN` | `False` | Enable Flash Attention |
 | `NLL_CHUNK` | `128` | numpy NLL rows per chunk |
 | `PPL_USE_TORCH` | `1` | `1` = PyTorch NLL (auto-picks cuda/xpu/cpu), `0` = numpy |
-| `BACKEND` | `llamacpp` | Backend id: `llamacpp` (needs `MODEL_PATH`) or `mock` (deterministic, no model) |
+| `BACKEND` | `llamacpp` | Backend id: `llamacpp` (needs `MODEL_PATH`) or `mock`. `mock` is **testing-only** — deterministic pseudo-NLL, not real inference |
 | `SLIDING_WINDOW` | `0` | Future API-layer sliding-window switch for inputs past a backend's limit (reserved, unused) |
 | `PORT` | `8000` | uvicorn listen port |
 

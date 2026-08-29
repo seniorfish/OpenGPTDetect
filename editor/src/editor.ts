@@ -72,21 +72,36 @@ function ignoredBreakStyle(): string {
   return `background-color: ${rgba(GRAY, 0.12)}; color: rgba(138, 138, 138, 0.9)`
 }
 
-/** Positions of '\n' characters inside the half-open doc range [from, to). */
-function newlinePositions(state: EditorState, from: number, to: number): number[] {
+/** First index in the sorted ascending `arr` whose value is >= `target`. */
+function lowerBound(arr: number[], target: number): number {
+  let lo = 0
+  let hi = arr.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (arr[mid] < target) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
+/** Collect every '\n' position in the document (all line ends but the last). */
+function collectNewlinePositions(state: EditorState): number[] {
   const out: number[] = []
-  const doc = state.doc
-  const lo = Math.max(0, Math.min(from, doc.length))
-  const hi = Math.min(to, doc.length)
-  if (hi <= lo) return out
-  let line = doc.lineAt(lo)
-  while (line.number <= doc.lines) {
-    const br = line.to
-    if (br >= hi) break
-    // br is the newline char position on every line but the document's last one.
-    if (br >= lo && line.number < doc.lines) out.push(br)
-    if (line.number >= doc.lines) break
-    line = doc.line(line.number + 1)
+  // Every line but the document's last one ends with a '\n' at line.to; the final
+  // line has no trailing newline and must not be reported. Positions are strictly
+  // ascending, enabling binary search for per-range lookups.
+  for (let lineNo = 1; lineNo < state.doc.lines; lineNo++) out.push(state.doc.line(lineNo).to)
+  return out
+}
+
+/**
+ * Positions of '\n' characters inside the half-open range [from, to), located by
+ * binary search over the precomputed (sorted ascending) list of newline positions.
+ */
+function newlinePositions(newlines: number[], from: number, to: number): number[] {
+  const out: number[] = []
+  for (let i = lowerBound(newlines, from); i < newlines.length && newlines[i] < to; i++) {
+    out.push(newlines[i])
   }
   return out
 }
@@ -126,11 +141,14 @@ function computeCoverage(
   const breaks: Array<{ pos: number; style: string }> = []
   const text = state.doc.toString()
   if (!text) return { marks, breaks }
+  // Collect all newline positions once, then answer each token/chunk interval by
+  // binary search, avoiding an O(tokens x lines) line scan.
+  const newlines = collectNewlinePositions(state)
 
   const addCovered = (from: number, to: number, cls: string, style: string, brkStyle: string): void => {
     if (to <= from) return
     let cur = from
-    for (const p of newlinePositions(state, from, to)) {
+    for (const p of newlinePositions(newlines, from, to)) {
       if (cur < p) marks.push({ start: cur, end: p, cls, style })
       breaks.push({ pos: p, style: brkStyle })
       cur = p + 1

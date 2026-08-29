@@ -243,7 +243,11 @@ class BreakOverlay {
         tr.effects.some((e) => e.is(setTokensEffect) || e.is(setIgnoresEffect) || e.is(refreshEffect))
       )
     ) {
-      this.redraw()
+      // Reading the layout is not allowed inside an update cycle; defer the
+      // redraw to the next animation frame so coordsAtPos is valid.
+      const view = this.view
+      const dom = this.dom
+      requestAnimationFrame(() => redrawBreakOverlay(view, dom))
     }
   }
 

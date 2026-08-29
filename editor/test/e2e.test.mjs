@@ -1,10 +1,15 @@
 // 端到端测试：真实 Chrome + mock 后端驱动打包后的单文件应用
-// 前置：node test/mock-server.mjs 8000 &；npm run build
+// 前置：在 server/ 下启动 Python mock（契约完整、无需模型）：
+//   conda activate xpu && BACKEND=mock python api.py &
+// 然后 npm run build
 // 用法：node test/e2e.test.mjs
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import puppeteer from 'puppeteer-core'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const URL = 'file:///' + path.resolve(__dirname, '../dist/index.html').replace(/\\/g, '/')
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe'
-const URL = 'file:///D:/Projects/editor/dist/index.html'
 
 let passed = 0
 const failures = []
@@ -98,7 +103,7 @@ const grayInfo = await evalFn(() => {
 })
 check('插入前缀后：新文字为灰色', grayInfo.gray > 0)
 check('插入前缀后：原测量保持彩色（未被弄脏）', grayInfo.colored > 0)
-check('字符数更新为 20', (await text('#st-chars')).includes('字符 20'))
+check('字符数更新为 26', (await text('#st-chars')).includes('字符 26'))
 
 // ---------- 选区平均 PPL（需求 4/13） ----------
 await page.keyboard.down('Control')

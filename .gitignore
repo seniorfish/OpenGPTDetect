@@ -13,6 +13,9 @@ node_modules/
 editor/dist/
 editor/.vite/
 
+# e2e 测试截图产物
+editor/test/e2e-screenshot.png
+
 # Build artifacts
 *.zip
 dist/

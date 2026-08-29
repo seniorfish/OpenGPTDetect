@@ -187,9 +187,21 @@ async function checkHealth(): Promise<void> {
   refreshStats()
 }
 
+let healthPollTimer: ReturnType<typeof setInterval> | null = null
+
 function startHealthPolling(): void {
+  // Idempotent: drop any previous timer before installing a fresh one.
+  if (healthPollTimer != null) clearInterval(healthPollTimer)
   void checkHealth()
-  setInterval(() => void checkHealth(), 15000)
+  healthPollTimer = setInterval(() => void checkHealth(), 15000)
+}
+
+/** Clear the periodic health poll. Safe to call anytime (destroy, restart, unmount). */
+function stopHealthPolling(): void {
+  if (healthPollTimer != null) {
+    clearInterval(healthPollTimer)
+    healthPollTimer = null
+  }
 }
 
 // ---------- Setting change hooks ----------
@@ -225,6 +237,7 @@ function initEditor(parent: HTMLElement): void {
 }
 
 function destroyEditor(): void {
+  stopHealthPolling()
   editor?.view.destroy()
   editor = null
 }
@@ -250,6 +263,7 @@ export function useApp(): {
   documentText: () => string
   getIgnores: () => Array<{ start: number; end: number }>
   startHealthPolling: () => void
+  stopHealthPolling: () => void
 } {
   return {
     state,
@@ -274,6 +288,7 @@ export function useApp(): {
     getTokens: () => editor?.getTokens() ?? [],
     documentText: () => editor?.view.state.doc.toString() ?? '',
     getIgnores: () => editor?.getIgnores() ?? [],
-    startHealthPolling
+    startHealthPolling,
+    stopHealthPolling
   }
 }

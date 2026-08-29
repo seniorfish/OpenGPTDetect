@@ -4,6 +4,7 @@ import { EditorState } from '@codemirror/state'
 import type { ChangeSet } from '@codemirror/state'
 import {
   sentenceChunks, paragraphChunks, avgNllOfTokens, visibleTokenSet, tokensInRange,
+  mergeIgnoreRanges, isIgnored,
   mapTokensThroughChanges, mapRangesThroughChanges
 } from '../src/chunks.ts'
 import { colorForPpl, hashText, buildCpToUtf16Map } from '../src/util.ts'
@@ -55,15 +56,16 @@ ok('颜色：节点间渐变', () => {
 })
 
 // ---------- Statistics ----------
-ok('平均 NLL：跳过脏/忽略/null', () => {
+ok('平均 NLL：跳过脏/忽略区间/null', () => {
   const tokens: Token[] = [
-    { tokenIndex: 0, tokenId: 0, text: 'a', nll: 1, ppl: Math.E, start: 0, end: 1, stale: false, ignored: false },
-    { tokenIndex: 1, tokenId: 1, text: 'b', nll: 3, ppl: 20, start: 1, end: 2, stale: false, ignored: false },
-    { tokenIndex: 2, tokenId: 2, text: 'c', nll: 100, ppl: 1e30, start: 2, end: 3, stale: true, ignored: false },
-    { tokenIndex: 3, tokenId: 3, text: 'd', nll: 100, ppl: 1e30, start: 3, end: 4, stale: false, ignored: true },
-    { tokenIndex: 4, tokenId: 4, text: 'e', nll: null, ppl: null, start: 4, end: 5, stale: false, ignored: false }
+    { tokenIndex: 0, tokenId: 0, text: 'a', nll: 1, ppl: Math.E, start: 0, end: 1, stale: false },
+    { tokenIndex: 1, tokenId: 1, text: 'b', nll: 3, ppl: 20, start: 1, end: 2, stale: false },
+    { tokenIndex: 2, tokenId: 2, text: 'c', nll: 100, ppl: 1e30, start: 2, end: 3, stale: true },
+    { tokenIndex: 3, tokenId: 3, text: 'd', nll: 100, ppl: 1e30, start: 3, end: 4, stale: false },
+    { tokenIndex: 4, tokenId: 4, text: 'e', nll: null, ppl: null, start: 4, end: 5, stale: false }
   ]
-  const stat = avgNllOfTokens(tokens)
+  const merged = mergeIgnoreRanges([{ start: 3, end: 4 }]) // ignore 'd'
+  const stat = avgNllOfTokens(tokens, merged)
   assert.strictEqual(stat && stat.count, 2)
   assert.strictEqual(stat && stat.nll, 2)
 })
@@ -71,7 +73,7 @@ ok('平均 NLL：跳过脏/忽略/null', () => {
 ok('分层显示：n%-m% 区间', () => {
   const tokens: Token[] = Array.from({ length: 10 }, (_, i) => ({
     tokenIndex: i, tokenId: i, text: String(i), nll: 1, ppl: (i + 1) * 10,
-    stale: false, ignored: false, start: i, end: i + 1
+    stale: false, start: i, end: i + 1
   }))
   assert.strictEqual(visibleTokenSet(tokens, 0, 100).size, 10)
   assert.strictEqual(visibleTokenSet(tokens, 0, 10).size, 1) // lowest 10%
@@ -101,7 +103,7 @@ function changeOf(doc: string, spec: { from: number; insert?: string; to?: numbe
 }
 
 const tk = (start: number, end: number, extra: Partial<Token> = {}): Token => ({
-  tokenIndex: 0, tokenId: 1, text: 'x', nll: 1, ppl: 2, stale: false, ignored: false, start, end, ...extra
+  tokenIndex: 0, tokenId: 1, text: 'x', nll: 1, ppl: 2, stale: false, start, end, ...extra
 })
 
 ok('文首插入前缀：原 token 后移且保持干净', () => {
@@ -149,6 +151,22 @@ ok('忽略区间随编辑映射', () => {
   const changes = changeOf('你好世界', { from: 0, insert: 'AB' })
   const out = mapRangesThroughChanges([{ start: 0, end: 2 }], changes)
   assert.deepStrictEqual(out, [{ start: 2, end: 4 }])
+})
+
+ok('忽略区间：合并重叠/相邻/零宽', () => {
+  assert.deepStrictEqual(mergeIgnoreRanges([
+    { start: 5, end: 9 }, { start: 1, end: 4 }, { start: 4, end: 6 }, { start: 3, end: 3 }
+  ]), [{ start: 1, end: 9 }])
+})
+
+ok('忽略判定：半开区间与零宽点', () => {
+  const merged = mergeIgnoreRanges([{ start: 2, end: 5 }])
+  assert.strictEqual(isIgnored(3, 4, merged), true)   // strictly inside
+  assert.strictEqual(isIgnored(5, 6, merged), false)  // starts exactly at the range end (half-open)
+  assert.strictEqual(isIgnored(0, 2, merged), false)  // ends exactly at the range start
+  assert.strictEqual(isIgnored(4, 4, merged), true)   // zero-width point inside
+  assert.strictEqual(isIgnored(6, 6, merged), false)  // zero-width point outside
+  assert.strictEqual(isIgnored(0, 1, []), false)      // empty ignore list
 })
 
 ok('tokensInRange：选区相交', () => {

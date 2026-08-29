@@ -45,7 +45,6 @@ export interface Token {
   start: number
   end: number
   stale: boolean
-  ignored: boolean
 }
 
 export interface StatResult {

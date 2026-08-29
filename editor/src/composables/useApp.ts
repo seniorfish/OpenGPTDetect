@@ -7,7 +7,7 @@ import { createEditor, type EditorApi } from '../editor.ts'
 import { createApi } from '../api.ts'
 import { settings } from './useSettings.ts'
 import { hashText, buildCpToUtf16Map, debounce } from '../util.ts'
-import { markIgnored, avgNllOfTokens } from '../chunks.ts'
+import { avgNllOfTokens, isIgnored, mergeIgnoreRanges } from '../chunks.ts'
 import { toast } from './useToasts.ts'
 import { t } from '../i18n.ts'
 import type { HealthResponse } from '../types.ts'
@@ -153,13 +153,12 @@ function updateStatusBar(): void {
   const doc = view.state.doc
   const text = doc.toString()
   const tokens = editor.getTokens()
-  const ignores = editor.getIgnores()
-  markIgnored(tokens, ignores)
-  const stat = avgNllOfTokens(tokens)
+  const merged = mergeIgnoreRanges(editor.getIgnores())
+  const stat = avgNllOfTokens(tokens, merged)
   // Coverage: chars covered by measured (non-stale) tokens / total chars.
   let covered = 0
   for (const tk of tokens) {
-    if (!tk.stale && !tk.ignored) covered += Math.max(0, tk.end - tk.start)
+    if (!tk.stale && !isIgnored(tk.start, tk.end, merged)) covered += Math.max(0, tk.end - tk.start)
   }
   const head = view.state.selection.main.head
   const line = doc.lineAt(head)

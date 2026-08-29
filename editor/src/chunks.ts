@@ -44,25 +44,53 @@ export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd
 }
 
 /**
- * Mark tokens ignored when they intersect any ignore range.
- * Both tokens and ignores use UTF-16 indices.
+ * Merge ignore ranges into a normalized, sorted, intersection-free list
+ * (zero-width ranges dropped). The result feeds `::isIgnored`, so each
+ * membership test is O(log n) instead of scanning every ignore range.
  */
-export function markIgnored(tokens: Token[], ignores: Range[]): Token[] {
-  for (const t of tokens) {
-    t.ignored = ignores.some((r) => rangesOverlap(t.start, Math.max(t.end, t.start + 1), r.start, r.end))
+export function mergeIgnoreRanges(ranges: Range[]): Range[] {
+  const merged: Range[] = []
+  const sorted = ranges
+    .map((r) => ({ start: Math.min(r.start, r.end), end: Math.max(r.start, r.end) }))
+    .sort((a, b) => a.start - b.start || a.end - b.end)
+  for (const r of sorted) {
+    if (r.end <= r.start) continue
+    const last = merged[merged.length - 1]
+    if (last && r.start <= last.end) last.end = Math.max(last.end, r.end)
+    else merged.push(r)
   }
-  return tokens
+  return merged
+}
+
+/**
+ * Whether the half-open span [start, end) touches any merged ignore range.
+ * A zero-width span is treated as a point so degenerate tokens still match.
+ * `merged` must come from `::mergeIgnoreRanges`.
+ */
+export function isIgnored(start: number, end: number, merged: Range[]): boolean {
+  // Find the first range that ends past `start`; every earlier range ends at
+  // or before `start`, so it cannot overlap a span that starts there.
+  let lo = 0
+  let hi = merged.length - 1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (merged[mid].end <= start) lo = mid + 1
+    else hi = mid - 1
+  }
+  if (lo >= merged.length) return false
+  const r = merged[lo]
+  return r.start < Math.max(end, start + 1)
 }
 
 /**
  * Average NLL over a set of tokens (skipping stale/ignored/null-NLL tokens).
  * Returns null when no valid token exists. Average PPL = exp(avg NLL), matching the backend definition.
  */
-export function avgNllOfTokens(tokens: Token[]): StatResult | null {
+export function avgNllOfTokens(tokens: Token[], mergedIgnored: Range[] = []): StatResult | null {
   let sum = 0
   let count = 0
   for (const t of tokens) {
-    if (t.stale || t.ignored || t.nll == null) continue
+    if (t.stale || isIgnored(t.start, t.end, mergedIgnored) || t.nll == null) continue
     sum += t.nll
     count++
   }
@@ -82,19 +110,19 @@ export function tokensInRange(tokens: Token[], start: number, end: number): Toke
 }
 
 /** Chunk statistics: one entry per chunk with its average PPL (null stat = no valid measurement). */
-export function buildChunks(text: string, tokens: Token[], mode: ChunkMode): Chunk[] {
+export function buildChunks(text: string, tokens: Token[], mode: ChunkMode, mergedIgnored: Range[] = []): Chunk[] {
   const ranges = mode === 'paragraph' ? paragraphChunks(text) : sentenceChunks(text)
   return ranges.map((r) => {
     const members = tokensInRange(tokens, r.start, r.end)
-    const ignored = members.length > 0 && members.every((t) => t.ignored)
-    return { ...r, stat: ignored ? null : avgNllOfTokens(members), ignored }
+    const ignored = members.length > 0 && members.every((t) => isIgnored(t.start, t.end, mergedIgnored))
+    return { ...r, stat: ignored ? null : avgNllOfTokens(members, mergedIgnored), ignored }
   })
 }
 
 /** Layered display: visible token set sorted by PPL ascending (n% ~ m% percentile window). */
-export function visibleTokenSet(tokens: Token[], n: number, m: number): Set<Token> {
+export function visibleTokenSet(tokens: Token[], n: number, m: number, mergedIgnored: Range[] = []): Set<Token> {
   const measured = tokens
-    .filter((t) => !t.stale && !t.ignored && t.ppl != null)
+    .filter((t) => !t.stale && !isIgnored(t.start, t.end, mergedIgnored) && t.ppl != null)
     .sort((a, b) => a.ppl! - b.ppl!)
   const visible = new Set<Token>()
   const total = measured.length

@@ -6,10 +6,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from '../i18n.ts'
 import { settings, saveSettings } from '../composables/useSettings.ts'
 import { useApp } from '../composables/useApp.ts'
+import { mergeIgnoreRanges, isIgnored } from '../chunks.ts'
 import { clamp, colorForPpl } from '../util.ts'
 
 const { t } = useI18n()
-const { state, getTokens, settingsChanged } = useApp()
+const { state, getTokens, getIgnores, settingsChanged } = useApp()
 
 interface HistoScale {
   x: (ppl: number) => number
@@ -93,8 +94,9 @@ function draw(): void {
   svg.innerHTML = ''
 
   const tokens = getTokens()
+  const merged = mergeIgnoreRanges(getIgnores())
   const arr = tokens
-    .filter((tk) => !tk.stale && !tk.ignored && tk.ppl != null)
+    .filter((tk) => !tk.stale && !isIgnored(tk.start, tk.end, merged) && tk.ppl != null)
     .map((tk) => Math.max(tk.ppl!, 1e-6))
     .sort((a, b) => a - b)
   histoData.arr = arr

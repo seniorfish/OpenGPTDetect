@@ -11,7 +11,7 @@ import { settings } from './composables/useSettings.ts'
 import { rgba, clamp, colorForPpl, escapeHtml } from './util.ts'
 import { t } from './i18n.ts'
 import {
-  buildChunks, markIgnored, visibleTokenSet, avgNllOfTokens, tokensInRange,
+  buildChunks, mergeIgnoreRanges, isIgnored, visibleTokenSet, avgNllOfTokens, tokensInRange,
   mapTokensThroughChanges, mapRangesThroughChanges
 } from './chunks.ts'
 import type { Token, Range as DocRange, PplResponse, StatResult } from './types.ts'
@@ -126,7 +126,6 @@ function computeCoverage(
   const text = state.doc.toString()
   if (!text) return { marks, breaks }
 
-  markIgnored(tokens, ignores)
   const addCovered = (from: number, to: number, cls: string, style: string, brkStyle: string): void => {
     if (to <= from) return
     let cur = from
@@ -137,14 +136,15 @@ function computeCoverage(
     }
     if (cur < to) marks.push({ start: cur, end: to, cls, style })
   }
+  const merged = mergeIgnoreRanges(ignores)
   const IGNORED_BRK = ignoredBreakStyle()
   const GRAY_BRK = breakStyleFor(GRAY)
 
   if (settings.chunkMode === 'token') {
-    const visible = visibleTokenSet(tokens, settings.windowN, settings.windowM)
+    const visible = visibleTokenSet(tokens, settings.windowN, settings.windowM, merged)
     for (const tk of tokens) {
       const hoverCls = hoverKey === `t${tk.tokenIndex}` ? ' hm-hover' : ''
-      if (tk.ignored) {
+      if (isIgnored(tk.start, tk.end, merged)) {
         addCovered(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (tk.stale || tk.ppl == null) {
         addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
@@ -167,7 +167,7 @@ function computeCoverage(
     }
     if (cur < text.length) addCovered(cur, text.length, 'hm', heatStyle(GRAY), GRAY_BRK)
   } else {
-    const chunks = buildChunks(text, tokens, settings.chunkMode)
+    const chunks = buildChunks(text, tokens, settings.chunkMode, merged)
     for (const c of chunks) {
       const hoverCls = hoverKey === `c${c.start}-${c.end}` ? ' hm-hover' : ''
       if (c.ignored) {
@@ -362,7 +362,7 @@ function infoAtPos(state: EditorState, pos: number): { key: string; label: strin
   const { tokens, ignores } = state.field(hmField)
   const text = state.doc.toString()
   if (!text) return null
-  markIgnored(tokens, ignores)
+  const merged = mergeIgnoreRanges(ignores)
   if (settings.chunkMode === 'token') {
     // Prefer a real (non-zero-width) token covering the position; only fall back
     // to a zero-width token pinned exactly at it. This stops hover from latching
@@ -371,13 +371,14 @@ function infoAtPos(state: EditorState, pos: number): { key: string; label: strin
       tokens.find((tm) => (tm.end > tm.start ? tm.start <= pos && pos < tm.end : false)) ??
       tokens.find((tm) => tm.end <= tm.start && tm.start === pos)
     if (!tk) return null
-    const suffix = tk.ignored ? t('tooltip.ignored') : tk.stale ? t('tooltip.stale') : ''
-    const stat = tk.ignored || tk.stale || tk.nll == null || tk.ppl == null
+    const ignored = isIgnored(tk.start, tk.end, merged)
+    const suffix = ignored ? t('tooltip.ignored') : tk.stale ? t('tooltip.stale') : ''
+    const stat = ignored || tk.stale || tk.nll == null || tk.ppl == null
       ? null
       : { nll: tk.nll, ppl: tk.ppl, count: 1 }
     return { key: `t${tk.tokenIndex}`, label: t('tooltip.tokenLabel', { index: tk.tokenIndex, text: tk.text, suffix }), stat }
   }
-  const chunks = buildChunks(text, tokens, settings.chunkMode)
+  const chunks = buildChunks(text, tokens, settings.chunkMode, merged)
   const c = chunks.find((ck) => ck.start <= pos && pos < ck.end)
   if (!c) return null
   const name = settings.chunkMode === 'sentence' ? t('tooltip.sentence') : t('tooltip.paragraph')
@@ -555,8 +556,8 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
       return
     }
     const { tokens, ignores } = v.state.field(hmField)
-    markIgnored(tokens, ignores)
-    const stat = avgNllOfTokens(tokensInRange(tokens, sel.from, sel.to))
+    const merged = mergeIgnoreRanges(ignores)
+    const stat = avgNllOfTokens(tokensInRange(tokens, sel.from, sel.to), merged)
     const html = `<div class="tip-label">${t('tooltip.selection', { chars: sel.to - sel.from })}</div>${statHtml(stat)}`
     const coords = v.coordsAtPos(sel.head) || v.coordsAtPos(sel.from)
     if (!coords) return
@@ -627,8 +628,7 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
           ppl: d.ppl,
           start,
           end,
-          stale: false,
-          ignored: false
+          stale: false
         })
       }
       view.dispatch({ effects: setTokensEffect.of({ tokens }) })

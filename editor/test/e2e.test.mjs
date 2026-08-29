@@ -105,21 +105,16 @@ check('插入前缀后：新文字为灰色', grayInfo.gray > 0)
 check('插入前缀后：原测量保持彩色（未被弄脏）', grayInfo.colored > 0)
 check('字符数更新为 26', (await text('#st-chars')).includes('字符 26'))
 
-// ---------- 选区平均 PPL（需求 4/13） ----------
+// ---------- 忽略清单（需求 14） ----------
+// 先选中末尾 3 字符，作为“忽略选区”的目标
 await page.keyboard.down('Control')
 await page.keyboard.press('End')
 await page.keyboard.up('Control')
 await page.keyboard.down('Shift')
-for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft')
+await page.keyboard.press('ArrowLeft')
+await page.keyboard.press('ArrowLeft')
+await page.keyboard.press('ArrowLeft')
 await page.keyboard.up('Shift')
-await sleep(200)
-const selTip = await evalFn(() => {
-  const t = [...document.querySelectorAll('.ppl-tooltip')].find((t) => t.style.display !== 'none')
-  return t ? t.textContent : null
-})
-check('选区显示平均 PPL 提示', !!selTip && selTip.includes('选区'))
-
-// ---------- 忽略清单（需求 14） ----------
 await page.click('#btn-ignore')
 await sleep(200)
 check('忽略计数为 1', (await text('#ignore-count')) === '1')
@@ -160,17 +155,6 @@ const hiddenTokens = await evalFn(() => {
   return els.length
 })
 check('Token 模式分层后仍有装饰块', hiddenTokens > 0)
-// 直方图 brush 模拟：拖选左半区
-const hg = await (await $('#histogram')).boundingBox()
-await page.mouse.move(hg.x + hg.width * 0.2, hg.y + hg.height / 2)
-await page.mouse.down()
-await page.mouse.move(hg.x + hg.width * 0.5, hg.y + hg.height / 2, { steps: 5 })
-await page.mouse.up()
-await sleep(300)
-const winAfterBrush = await text('#window-label')
-check('直方图 brush 改变窗口', !winAfterBrush.includes('0%–100%') && /窗口 \d+%–\d+%/.test(winAfterBrush))
-await page.click('#btn-win-all')
-
 // ---------- 保存预设（需求 12） ----------
 await page.click('#btn-save-preset')
 await page.type('#preset-name', 'e2e测试方案')

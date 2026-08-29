@@ -11,9 +11,19 @@ cap, which is the seam a future API-level sliding window would use.
 
 from __future__ import annotations
 
+import sys
 from typing import Iterator, List, Optional
 
 from . import Backend, Capabilities
+
+
+_MOCK_WARNING = f"""
+{'=' * 64}
+WARNING: MockBackend is active.
+Scores are deterministic pseudo-NLL - NOT real model inference.
+For tests / frontend development only; never use for real analysis.
+{'=' * 64}
+"""
 
 
 def _pseudo_nll(tid: int, prev: int) -> float:
@@ -56,6 +66,9 @@ class MockBackend(Backend):
     # ---- lifecycle ----------------------------------------------------
     def load(self, model_path: Optional[str] = None, **kw) -> None:
         self._loaded = True
+        # Printed on startup and on every runtime load/switch, so a user
+        # silently running the mock on 8000 cannot miss that it is fake.
+        print(_MOCK_WARNING, file=sys.stderr)
 
     def unload(self) -> None:
         self._loaded = False

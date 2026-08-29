@@ -70,7 +70,7 @@ body {
 }
 
 /* Heat-map chunks */
-.hm { border-radius: 3px; padding: 1px 0; cursor: default; transition: filter 0.08s; }
+.hm { border-radius: 3px; padding: 1px 0; cursor: text; transition: filter 0.08s; }
 .hm-hover { outline: 1.5px solid rgba(30, 64, 175, 0.55); filter: brightness(0.93); }
 .hm-ignored { font-style: italic; }
 

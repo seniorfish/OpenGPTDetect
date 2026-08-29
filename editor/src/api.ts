@@ -50,8 +50,6 @@ export function createApi(getBaseUrl: () => string) {
       }
     },
     /** POST /ppl one-step: text -> PPL. */
-    ppl: (text: string): Promise<PplResponse> => postJson<PplResponse>('/ppl', { text }),
-    /** POST /tokenize, tokenization only. */
-    tokenize: (text: string): Promise<unknown> => postJson<unknown>('/tokenize', { text })
+    ppl: (text: string): Promise<PplResponse> => postJson<PplResponse>('/ppl', { text })
   }
 }

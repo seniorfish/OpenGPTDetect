@@ -12,7 +12,7 @@
   alignment, aggregation, backend switching, `__main__` entry.
 - `server/tests/..` — pytest contract tests; run on the mock backend, no model.
 - `docs/api.md` — API contract baseline.
-- `editor/..` — Vite + CodeMirror 6 (TypeScript) frontend; builds to a single HTML.
+- `editor/..` — Vite + Vue 3 (script setup) + CodeMirror 6 frontend, built to a single HTML; zh/en via vue-i18n.
 - `extension/..` — Chrome MV3 extension turning page text into PPL heatmaps.
 - root `README*.md` — overview and configuration.
 

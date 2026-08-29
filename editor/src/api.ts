@@ -1,4 +1,4 @@
-// ---------- 后端 API 封装 ----------
+// ---------- Backend API wrapper ----------
 import type { HealthResponse, PplResponse } from './types.ts'
 
 export class ApiError extends Error {
@@ -39,7 +39,7 @@ export function createApi(getBaseUrl: () => string) {
   }
 
   return {
-    /** GET /health，返回 null 表示离线 */
+    /** GET /health; returns null when offline. */
     async health(): Promise<HealthResponse | null> {
       try {
         const resp = await fetch(url('/health'), { signal: AbortSignal.timeout(4000) })
@@ -49,9 +49,9 @@ export function createApi(getBaseUrl: () => string) {
         return null
       }
     },
-    /** POST /ppl 一步式：文本 -> PPL */
+    /** POST /ppl one-step: text -> PPL. */
     ppl: (text: string): Promise<PplResponse> => postJson<PplResponse>('/ppl', { text }),
-    /** POST /tokenize 仅分词 */
+    /** POST /tokenize, tokenization only. */
     tokenize: (text: string): Promise<unknown> => postJson<unknown>('/tokenize', { text })
   }
 }

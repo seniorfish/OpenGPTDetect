@@ -1,12 +1,41 @@
-// ---------- 配置与预设的本地持久化 ----------
-import type { Settings, Preset, HeatStyle, ChunkMode } from './types.ts'
+// ---------- Settings & preset persistence (framework-free data layer) ----------
+import type { Settings, Preset } from './types.ts'
 
-const LS_SETTINGS = 'ppl-editor.settings.v1'
-const LS_PRESETS = 'ppl-editor.presets.v1'
+export const LS_SETTINGS = 'ppl-editor.settings.v1'
+export const LS_PRESETS = 'ppl-editor.presets.v1'
+
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw) as T
+  } catch {
+    return fallback
+  }
+}
+
+function saveJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Storage unavailable: fail silently.
+  }
+}
+
+/** Read the persisted settings delta (empty object when none). */
+export function loadSettings(): Partial<Settings> {
+  return loadJson<Partial<Settings>>(LS_SETTINGS, {})
+}
+
+/** Persist the current settings (works with a reactive object; serializes its values). */
+export function saveSettingsJson(value: unknown): void {
+  saveJson(LS_SETTINGS, value)
+}
 
 /**
- * 内置预设（首次运行时写入）。可在代码中直接修改这两个对象。
- * 节点含义：ppl <= 12 绿；12~18 绿->黄渐变；18~50 黄->红；50~100 红->深红；>=100 深红。
+ * Built-in presets (written on first run). Editable directly in this file.
+ * Node meaning: ppl <= 12 green; 12~18 green->yellow gradient; 18~50 yellow->red;
+ * 50~100 red->dark red; >=100 dark red.
  */
 export const BUILTIN_PRESETS: Preset[] = [
   {
@@ -44,38 +73,13 @@ export const DEFAULT_SETTINGS: Settings = {
   fontFamily: "'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif",
   fontSize: 16,
   autoRefresh: false,
-  // 分层显示（仅 token 模式）
+  // Layered display (token mode only)
   windowN: 0,
   windowM: 100,
   windowWidth: 10
 }
 
-function loadJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return fallback
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
-
-function saveJson(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    /* 存储不可用时静默失败 */
-  }
-}
-
-/** 当前配置（内存中的唯一事实来源） */
-export const settings: Settings = Object.assign({}, DEFAULT_SETTINGS, loadJson<Partial<Settings>>(LS_SETTINGS, {}))
-
-export function saveSettings(): void {
-  saveJson(LS_SETTINGS, settings)
-}
-
-/** 预设表：{ [name]: preset } */
+/** Preset table: { [name]: preset } */
 export function loadPresets(): Record<string, Preset> {
   let presets: Record<string, Preset> | null = loadJson<Record<string, Preset> | null>(LS_PRESETS, null)
   if (!presets || typeof presets !== 'object' || Object.keys(presets).length === 0) {
@@ -104,28 +108,4 @@ export function renamePreset(oldName: string, newName: string): void {
   presets[newName] = presets[oldName]
   delete presets[oldName]
   saveJson(LS_PRESETS, presets)
-}
-
-/** 把当前 settings 中属于“配置方案”的部分抽取为一个预设对象 */
-export function presetFromSettings(name: string): Preset {
-  return {
-    name,
-    stops: settings.stops.map((s) => ({ ...s })),
-    style: settings.style,
-    opacity: settings.opacity,
-    chunkMode: settings.chunkMode
-  }
-}
-
-export function applyPreset(preset: Preset | undefined): void {
-  if (!preset) return
-  if (Array.isArray(preset.stops) && preset.stops.length) {
-    settings.stops = preset.stops.map((s) => ({ ppl: Number(s.ppl), color: s.color }))
-  }
-  const style = preset.style as HeatStyle
-  if (style) settings.style = style
-  if (typeof preset.opacity === 'number') settings.opacity = preset.opacity
-  const chunkMode = preset.chunkMode as ChunkMode
-  if (chunkMode) settings.chunkMode = chunkMode
-  saveSettings()
 }

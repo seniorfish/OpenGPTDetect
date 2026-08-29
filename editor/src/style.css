@@ -1,4 +1,4 @@
-/* ---------- 布局 ---------- */
+/* ---------- Layout ---------- */
 * { box-sizing: border-box; }
 html, body, #app { height: 100%; margin: 0; }
 body {
@@ -9,7 +9,7 @@ body {
 }
 #app { display: flex; flex-direction: column; }
 
-/* ---------- 工具栏 ---------- */
+/* ---------- Toolbar ---------- */
 .toolbar {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 6px 10px;
@@ -41,7 +41,7 @@ body {
 .toolbar .chk { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .toolbar .lbl { display: flex; align-items: center; gap: 4px; color: #555; }
 
-/* ---------- 编辑区 ---------- */
+/* ---------- Editor area ---------- */
 .editor-wrap {
   flex: 1;
   min-height: 0;
@@ -55,12 +55,12 @@ body {
 .editor-wrap .cm-editor.cm-focused { outline: none; }
 .editor-wrap .cm-scroller { line-height: 1.7; }
 
-/* 热力图分块 */
+/* Heat-map chunks */
 .hm { border-radius: 3px; padding: 1px 0; cursor: default; transition: filter 0.08s; }
 .hm-hover { outline: 1.5px solid rgba(30, 64, 175, 0.55); filter: brightness(0.93); }
 .hm-ignored { font-style: italic; }
 
-/* ---------- 直方图面板 ---------- */
+/* ---------- Histogram panel ---------- */
 .histo-panel {
   margin: 6px 10px 0;
   padding: 4px 8px 2px;
@@ -90,7 +90,7 @@ body {
 .histo-brush { fill: rgba(37, 99, 235, 0.25); stroke: #2563eb; stroke-width: 1; }
 .histo-hint { font-size: 11px; color: #999; padding: 0 0 3px; }
 
-/* ---------- 状态栏 ---------- */
+/* ---------- Status bar ---------- */
 .statusbar {
   display: flex; align-items: center; gap: 2px;
   padding: 3px 10px;
@@ -104,7 +104,7 @@ body {
 .statusbar .st.clickable { cursor: pointer; color: #2563eb; }
 .statusbar .st.offline { color: #c02626; }
 
-/* ---------- 提示框 ---------- */
+/* ---------- Tooltips ---------- */
 .ppl-tooltip {
   position: fixed;
   z-index: 1000;
@@ -121,7 +121,7 @@ body {
 .ppl-tooltip .tip-label { font-weight: 600; margin-bottom: 2px; word-break: break-all; }
 .ppl-tooltip .tip-dim { color: #9aa0a6; margin-left: 4px; }
 
-/* ---------- 弹窗 ---------- */
+/* ---------- Modal ---------- */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.35);

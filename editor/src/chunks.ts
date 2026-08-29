@@ -1,12 +1,15 @@
-// ---------- 分块（句子 / 段落）与统计 ----------
+// ---------- Chunking (sentence / paragraph) and statistics ----------
+import type { ChangeSet } from '@codemirror/state'
 import type { Token, Chunk, Range, ChunkMode, StatResult } from './types.ts'
 
-// 句子分隔符：英文/中文常见标点，以及换行（段落分隔符也算句子边界）
+// Sentence delimiters: common English/Chinese punctuation and newlines
+// (a paragraph separator also counts as a sentence boundary).
 const SENTENCE_DELIMS = /[.,;:!?。，；：！？、…\n]/
 
 /**
- * 句子分块：以标点或换行为界的连续片段，分隔符合入前一个块。
- * 返回 [{start, end}]（UTF-16 下标，半开区间），覆盖全文，无零宽块。
+ * Sentence chunking: contiguous runs split at punctuation or newlines;
+ * the delimiter belongs to the preceding chunk.
+ * Returns [{start, end}] (UTF-16 indices, half-open) covering the whole text, no zero-width chunks.
  */
 export function sentenceChunks(text: string): Range[] {
   const chunks = []
@@ -21,7 +24,7 @@ export function sentenceChunks(text: string): Range[] {
   return chunks.filter((c) => c.end > c.start)
 }
 
-/** 段落分块：按换行切分（换行符本身归入前一段，保证全覆盖） */
+/** Paragraph chunking: split at newlines (the newline itself belongs to the preceding chunk, keeping full coverage). */
 export function paragraphChunks(text: string): Range[] {
   const chunks = []
   let start = 0
@@ -35,14 +38,14 @@ export function paragraphChunks(text: string): Range[] {
   return chunks.filter((c) => c.end > c.start)
 }
 
-/** 判断两个半开区间是否相交 */
+/** Whether two half-open ranges intersect. */
 export function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
   return aStart < bEnd && bStart < aEnd
 }
 
 /**
- * 给 token 列表标注 ignored 标志（与任一忽略区间相交即忽略）。
- * tokens / ignores 均使用 UTF-16 下标。
+ * Mark tokens ignored when they intersect any ignore range.
+ * Both tokens and ignores use UTF-16 indices.
  */
 export function markIgnored(tokens: Token[], ignores: Range[]): Token[] {
   for (const t of tokens) {
@@ -52,8 +55,8 @@ export function markIgnored(tokens: Token[], ignores: Range[]): Token[] {
 }
 
 /**
- * 对一组 token 求平均 NLL（跳过未测量/脏数据/被忽略/nll 为 null 的 token）。
- * 返回 null 表示没有有效 token。平均 PPL = exp(平均 NLL)，与后端 average_ppl 定义一致。
+ * Average NLL over a set of tokens (skipping stale/ignored/null-NLL tokens).
+ * Returns null when no valid token exists. Average PPL = exp(avg NLL), matching the backend definition.
  */
 export function avgNllOfTokens(tokens: Token[]): StatResult | null {
   let sum = 0
@@ -68,17 +71,17 @@ export function avgNllOfTokens(tokens: Token[]): StatResult | null {
   return { nll, ppl: Math.exp(Math.min(nll, 80)), count }
 }
 
-/** 取与区间 [start, end) 相交（或中心落在其中）的 token */
+/** Tokens intersecting (or centered in) the half-open range [start, end). */
 export function tokensInRange(tokens: Token[], start: number, end: number): Token[] {
   return tokens.filter((t) => {
     const ts = t.start
-    const te = Math.max(t.end, t.start) // 零宽 token 按点处理
+    const te = Math.max(t.end, t.start) // zero-width token treated as a point
     if (te === ts) return ts >= start && ts <= end
     return rangesOverlap(ts, te, start, end)
   })
 }
 
-/** 分块统计：返回块列表，每块附带平均 PPL 信息（信息为 null 表示无有效测量） */
+/** Chunk statistics: one entry per chunk with its average PPL (null stat = no valid measurement). */
 export function buildChunks(text: string, tokens: Token[], mode: ChunkMode): Chunk[] {
   const ranges = mode === 'paragraph' ? paragraphChunks(text) : sentenceChunks(text)
   return ranges.map((r) => {
@@ -88,7 +91,7 @@ export function buildChunks(text: string, tokens: Token[], mode: ChunkMode): Chu
   })
 }
 
-/** 分层显示：返回按 PPL 升序的可见 token 集合（n% ~ m% 区间） */
+/** Layered display: visible token set sorted by PPL ascending (n% ~ m% percentile window). */
 export function visibleTokenSet(tokens: Token[], n: number, m: number): Set<Token> {
   const measured = tokens
     .filter((t) => !t.stale && !t.ignored && t.ppl != null)
@@ -98,7 +101,50 @@ export function visibleTokenSet(tokens: Token[], n: number, m: number): Set<Toke
   measured.forEach((t, i) => {
     const pct = total === 0 ? 0 : (i / total) * 100
     if (pct >= n - 1e-9 && pct < m - 1e-9) visible.add(t)
-    if (m >= 100 && i === total - 1) visible.add(t) // 右端点闭区间
+    if (m >= 100 && i === total - 1) visible.add(t) // right endpoint inclusive
   })
   return visible
+}
+
+// ---------- Mapping tokens/ranges through edits ----------
+
+/**
+ * Map token ranges through a ChangeDesc:
+ * - Tokens intersecting a delete/replace range become stale.
+ * - Insertions strictly inside a token become stale.
+ * - Insertions on a boundary do not (e.g. a prefix insertion shifts "你好" intact).
+ * - Tokens whose range is emptied by an edit are dropped.
+ */
+export function mapTokensThroughChanges(tokens: Token[], changes: ChangeSet): Token[] {
+  const edits: Array<[number, number]> = []
+  changes.iterChanges((fromA, toA) => edits.push([fromA, toA]))
+  const out: Token[] = []
+  for (const t of tokens) {
+    const zeroWidth = t.end <= t.start
+    let stale = t.stale
+    for (const [fA, tA] of edits) {
+      if (fA === tA) {
+        // Pure insertion: only strictly-inside insertions dirty the token;
+        // hitting a zero-width token's position also dirties it.
+        if (zeroWidth ? fA === t.start : fA > t.start && fA < t.end) stale = true
+      } else if (rangesOverlap(fA, tA, t.start, Math.max(t.end, t.start + 1))) {
+        stale = true
+      }
+    }
+    const s = changes.mapPos(t.start, zeroWidth ? 0 : 1)
+    const e = changes.mapPos(t.end, zeroWidth ? 0 : -1)
+    if (zeroWidth ? stale : e <= s) continue // zero-width token dropped when dirty; normal token dropped when emptied
+    out.push({ ...t, start: s, end: e, stale })
+  }
+  return out
+}
+
+export function mapRangesThroughChanges(ranges: Range[], changes: ChangeSet): Range[] {
+  const out: Range[] = []
+  for (const r of ranges) {
+    const s = changes.mapPos(r.start, 1)
+    const e = changes.mapPos(r.end, -1)
+    if (e > s) out.push({ start: s, end: e })
+  }
+  return out
 }

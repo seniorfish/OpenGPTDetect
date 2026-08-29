@@ -1,7 +1,10 @@
-// ---------- 通用工具 ----------
+// ---------- Shared utilities ----------
 import type { ColorStop } from './types.ts'
 
-/** cyrb53 字符串哈希，用于比对“发出请求时的文本”与“当前文本”是否一致 */
+/**
+ * cyrb53 string hash. Used to compare "the text sent in a request" with "the
+ * current text" so stale analysis results are never applied to changed positions.
+ */
 export function hashText(str: string, seed = 0): string {
   let h1 = 0xdeadbeef ^ seed
   let h2 = 0x41c6ce57 ^ seed
@@ -16,9 +19,9 @@ export function hashText(str: string, seed = 0): string {
 }
 
 /**
- * 后端返回的 char_start/char_end 是 Python 字符串下标（Unicode 码点）。
- * JS/CodeMirror 使用 UTF-16 码元下标（emoji 等代理对占 2 个码元）。
- * 该函数返回一个数组 map，map[码点下标] = UTF-16 下标。
+ * The backend returns char_start/char_end as Python string indices (Unicode code
+ * points). JS/CodeMirror use UTF-16 code-unit indices (a surrogate pair such as an
+ * emoji takes 2 units). This returns map[codePointIndex] = UTF-16 index.
  */
 export function buildCpToUtf16Map(text: string): number[] {
   const map = [0]
@@ -47,9 +50,9 @@ export function debounce<A extends unknown[]>(
   return wrapped
 }
 
-// ---------- 颜色 ----------
+// ---------- Color ----------
 
-/** '#rrggbb' -> [r,g,b] */
+/** '#rrggbb' -> [r, g, b] */
 export function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
   if (!m) return [128, 128, 128]
@@ -63,8 +66,9 @@ export function rgbToHex([r, g, b]: [number, number, number]): string {
 }
 
 /**
- * 按颜色节点插值。stops: [{ppl, color}]（按 ppl 升序）。
- * 低于最小节点取最小节点颜色，高于最大节点取最大节点颜色，否则线性渐变。
+ * Interpolate along color stops. stops: [{ppl, color}] sorted by ppl ascending.
+ * Below the lowest stop the endpoint color is used, above the highest the endpoint
+ * color is used, and in between values are linearly interpolated.
  */
 export function colorForPpl(ppl: number, stops: ColorStop[]): string {
   if (!stops.length) return '#999999'
@@ -76,10 +80,10 @@ export function colorForPpl(ppl: number, stops: ColorStop[]): string {
     const a = sorted[i]
     const b = sorted[i + 1]
     if (ppl >= a.ppl && ppl <= b.ppl) {
-      const t = b.ppl === a.ppl ? 0 : (ppl - a.ppl) / (b.ppl - a.ppl)
+      const tm = b.ppl === a.ppl ? 0 : (ppl - a.ppl) / (b.ppl - a.ppl)
       const ca = hexToRgb(a.color)
       const cb = hexToRgb(b.color)
-      return rgbToHex([ca[0] + (cb[0] - ca[0]) * t, ca[1] + (cb[1] - ca[1]) * t, ca[2] + (cb[2] - ca[2]) * t])
+      return rgbToHex([ca[0] + (cb[0] - ca[0]) * tm, ca[1] + (cb[1] - ca[1]) * tm, ca[2] + (cb[2] - ca[2]) * tm])
     }
   }
   return last.color
@@ -90,7 +94,7 @@ export function rgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-/** 数值显示：保留有效小数，过大/过小用科学计数 */
+/** Number formatting: keeps significant decimal places; uses scientific notation for very large/small values. */
 export function fmtNum(v: number | null, digits = 2): string {
   if (v == null || Number.isNaN(v)) return '—'
   if (v >= 1e6 || (v > 0 && v < 1e-3)) return v.toExponential(2)

@@ -1,68 +1,29 @@
-// ---------- 编辑器（CodeMirror 6）----------
-// 职责：文本编辑、撤销/重做、热力图装饰层、脏 token 追踪、悬停/选区提示。
-
+// ---------- Editor (CodeMirror 6) ----------
+// Responsibilities: text editing, undo/redo, the heat-map decoration layer,
+// stale-token tracking, and hover/selection tooltips.
 import { EditorState, StateField, StateEffect, Prec } from '@codemirror/state'
 import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers } from '@codemirror/view'
-import type { ChangeSet, Transaction } from '@codemirror/state'
+import type { Transaction } from '@codemirror/state'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands'
-import { settings } from './store.ts'
+import { settings } from './composables/useSettings.ts'
 import { rgba, clamp, colorForPpl, escapeHtml } from './util.ts'
+import { t } from './i18n.ts'
 import {
-  buildChunks, markIgnored, visibleTokenSet, avgNllOfTokens, tokensInRange, rangesOverlap
+  buildChunks, markIgnored, visibleTokenSet, avgNllOfTokens, tokensInRange,
+  mapTokensThroughChanges, mapRangesThroughChanges
 } from './chunks.ts'
 import type { Token, Range as DocRange, PplResponse, StatResult } from './types.ts'
 
-const GRAY = '#8a8a8a' // 未测量/脏数据颜色
+const GRAY = '#8a8a8a' // color for unmeasured/stale data
 
-// ---------- 状态效果 ----------
-const setTokensEffect = StateEffect.define<{ tokens: Token[] }>() // {tokens} 分析结果落地
-const setIgnoresEffect = StateEffect.define<{ ranges: DocRange[] }>() // {ranges:[{start,end}]}
-const setHoverEffect = StateEffect.define<{ key: string | null }>() // {key|null}
-const refreshEffect = StateEffect.define<null>() // 配置变化，重建装饰
+// ---------- State effects ----------
+const setTokensEffect = StateEffect.define<{ tokens: Token[] }>() // analysis result lands
+const setIgnoresEffect = StateEffect.define<{ ranges: DocRange[] }>() // ignores updated
+const setHoverEffect = StateEffect.define<{ key: string | null }>() // hovered chunk key
+const refreshEffect = StateEffect.define<null>() // setting change: rebuild decorations
 
-// ---------- 编辑引起的 token 映射与脏标记 ----------
-/**
- * 通过 ChangeDesc 映射 token 区间：
- * - 与删除/替换区间相交的 token → 脏（stale）
- * - 严格落在 token 内部的插入 → 脏
- * - 边界上的插入不影响（如文首插入前缀，"你好" 原样后移）
- * - 区间被删空的 token → 丢弃
- */
-export function mapTokensThroughChanges(tokens: Token[], changes: ChangeSet): Token[] {
-  const edits: Array<[number, number]> = []
-  changes.iterChanges((fromA, toA) => edits.push([fromA, toA]))
-  const out: Token[] = []
-  for (const t of tokens) {
-    const zeroWidth = t.end <= t.start
-    let stale = t.stale
-    for (const [fA, tA] of edits) {
-      if (fA === tA) {
-        // 纯插入：只有严格落在内部才弄脏；落在零宽 token 位置也算弄脏
-        if (zeroWidth ? fA === t.start : fA > t.start && fA < t.end) stale = true
-      } else if (rangesOverlap(fA, tA, t.start, Math.max(t.end, t.start + 1))) {
-        stale = true
-      }
-    }
-    const s = changes.mapPos(t.start, zeroWidth ? 0 : 1)
-    const e = changes.mapPos(t.end, zeroWidth ? 0 : -1)
-    if (zeroWidth ? stale : e <= s) continue // 零宽 token 弄脏即丢弃；普通 token 删空即丢弃
-    out.push({ ...t, start: s, end: e, stale })
-  }
-  return out
-}
-
-export function mapRangesThroughChanges(ranges: DocRange[], changes: ChangeSet): DocRange[] {
-  const out: DocRange[] = []
-  for (const r of ranges) {
-    const s = changes.mapPos(r.start, 1)
-    const e = changes.mapPos(r.end, -1)
-    if (e > s) out.push({ start: s, end: e })
-  }
-  return out
-}
-
-// ---------- 装饰样式 ----------
+// ---------- Decoration styles ----------
 function heatStyle(hex: string): string {
   const parts: string[] = []
   if (settings.style === 'background' || settings.style === 'both') {
@@ -83,7 +44,7 @@ function ignoredStyle(): string {
   return `background-color: ${rgba(GRAY, 0.12)}; border-bottom: 1px dotted ${GRAY}`
 }
 
-// ---------- 装饰构建 ----------
+// ---------- Decoration construction ----------
 function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null }): DecorationSet {
   const { tokens, ignores, hoverKey } = data
   const text = state.doc.toString()
@@ -97,22 +58,22 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
 
   if (settings.chunkMode === 'token') {
     const visible = visibleTokenSet(tokens, settings.windowN, settings.windowM)
-    for (const t of tokens) {
-      const hoverCls = hoverKey === `t${t.tokenIndex}` ? ' hm-hover' : ''
-      if (t.ignored) {
-        addMark(t.start, t.end, 'hm hm-ignored' + hoverCls, ignoredStyle())
-      } else if (t.stale || t.ppl == null) {
-        addMark(t.start, t.end, 'hm' + hoverCls, heatStyle(GRAY))
-      } else if (visible.has(t)) {
-        addMark(t.start, t.end, 'hm' + hoverCls, heatStyle(colorForPpl(t.ppl, settings.stops)))
+    for (const tk of tokens) {
+      const hoverCls = hoverKey === `t${tk.tokenIndex}` ? ' hm-hover' : ''
+      if (tk.ignored) {
+        addMark(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle())
+      } else if (tk.stale || tk.ppl == null) {
+        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY))
+      } else if (visible.has(tk)) {
+        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(colorForPpl(tk.ppl, settings.stops)))
       }
-      // 分层显示中被过滤掉的 token：不加装饰（隐藏热力图）
+      // Tokens filtered out by the layered window get no decoration (heat map hidden).
     }
-    // 只有"未被任何 token 覆盖的文字"（新输入、未测量）才补灰色；
-    // 被分层窗口过滤掉的 token 不加任何装饰（不显示热力图，也不是灰色）
+    // Only text not covered by any token (new input, unmeasured) gets gray;
+    // tokens filtered out by the layered window get no decoration at all.
     const covered: Array<[number, number]> = tokens
-      .filter((t) => t.end > t.start)
-      .map((t) => [t.start, t.end] as [number, number])
+      .filter((tk) => tk.end > tk.start)
+      .map((tk) => [tk.start, tk.end] as [number, number])
       .sort((a, b) => a[0] - b[0])
     const gaps: Array<{ start: number; end: number; cls: string; style: string }> = []
     let cur = 0
@@ -136,7 +97,7 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
     }
   }
 
-  // RangeSetBuilder 要求严格递增且不重叠
+  // RangeSetBuilder requires strictly increasing, non-overlapping ranges.
   marks.sort((a, b) => a.start - b.start || a.end - b.end)
   const ranges = []
   let lastEnd = -1
@@ -148,7 +109,7 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
   return Decoration.set(ranges)
 }
 
-// ---------- 热力图 StateField ----------
+// ---------- Heat-map state field ----------
 interface HMValue {
   tokens: Token[]
   ignores: DocRange[]
@@ -186,7 +147,7 @@ export const hmField: StateField<HMValue> = StateField.define<HMValue>({
   provide: (f) => EditorView.decorations.from(f, (v) => v.deco)
 })
 
-// ---------- 提示框 ----------
+// ---------- Tooltips ----------
 type Tooltip = { el: HTMLDivElement | null }
 
 function makeTooltipEl(): HTMLDivElement {
@@ -216,41 +177,42 @@ function hideTip(tip: Tooltip): void {
 }
 
 function statHtml(stat: StatResult | null): string {
-  if (!stat) return '<span class="tip-dim">未测量（或无有效 Token）</span>'
+  if (!stat) return `<span class="tip-dim">${t('tooltip.unmeasured')}</span>`
+  // Labels come from i18n; markup is assembled here to keep messages free of HTML.
+  const ppl = stat.ppl < 1000 ? stat.ppl.toPrecision(3) : stat.ppl.toExponential(2)
   return (
-    `平均 PPL <b>${stat.ppl < 1000 ? stat.ppl.toPrecision(3) : stat.ppl.toExponential(2)}</b>` +
-    ` · NLL ${stat.nll.toFixed(3)}` +
-    `<span class="tip-dim">（${stat.count} 个有效 Token）</span>`
+    `${t('tooltip.statPpl')} <b>${ppl}</b> · ${t('tooltip.statNll')} ${stat.nll.toFixed(3)} ` +
+    `<span class="tip-dim">${t('tooltip.statCount', { count: stat.count })}</span>`
   )
 }
 
-/** 查询某文档位置在当前分块模式下的统计信息 */
+/** Statistics for the chunk at a document position under the current chunking mode. */
 function infoAtPos(state: EditorState, pos: number): { key: string; label: string; stat: StatResult | null } | null {
   const { tokens, ignores } = state.field(hmField)
   const text = state.doc.toString()
   if (!text) return null
   markIgnored(tokens, ignores)
   if (settings.chunkMode === 'token') {
-    const t = tokens.find((t) => (t.end > t.start ? t.start <= pos && pos < t.end : t.start === pos))
-    if (!t) return null
-    const suffix = t.ignored ? '（已忽略）' : t.stale ? '（已失效）' : ''
-    const stat = t.ignored || t.stale || t.nll == null || t.ppl == null
+    const tk = tokens.find((tm) => (tm.end > tm.start ? tm.start <= pos && pos < tm.end : tm.start === pos))
+    if (!tk) return null
+    const suffix = tk.ignored ? t('tooltip.ignored') : tk.stale ? t('tooltip.stale') : ''
+    const stat = tk.ignored || tk.stale || tk.nll == null || tk.ppl == null
       ? null
-      : { nll: t.nll, ppl: t.ppl, count: 1 }
-    return { key: `t${t.tokenIndex}`, label: `Token #${t.tokenIndex}「${t.text}」${suffix}`, stat }
+      : { nll: tk.nll, ppl: tk.ppl, count: 1 }
+    return { key: `t${tk.tokenIndex}`, label: t('tooltip.tokenLabel', { index: tk.tokenIndex, text: tk.text, suffix }), stat }
   }
   const chunks = buildChunks(text, tokens, settings.chunkMode)
-  const c = chunks.find((c) => c.start <= pos && pos < c.end)
+  const c = chunks.find((ck) => ck.start <= pos && pos < ck.end)
   if (!c) return null
-  const name = settings.chunkMode === 'sentence' ? '句子' : '段落'
+  const name = settings.chunkMode === 'sentence' ? t('tooltip.sentence') : t('tooltip.paragraph')
   return {
     key: `c${c.start}-${c.end}`,
-    label: name + (c.ignored ? '（已忽略）' : ''),
+    label: name + (c.ignored ? t('tooltip.ignored') : ''),
     stat: c.ignored ? null : c.stat
   }
 }
 
-/** 悬停插件：mousemove 定位分块 → 突出显示 + 弹出 PPL 提示 */
+/** Hover plugin: mousemove locates the chunk, highlights it, and pops its PPL tooltip. */
 class Hover {
   view: EditorView
   key: string | null
@@ -263,8 +225,8 @@ class Hover {
   }
 
   update(): void {
-    // 文档/配置变化后重新校验当前悬停位置。
-    // 更新周期内不允许同步 dispatch，延迟到周期外执行。
+    // Re-validate the hovered position after document/setting changes.
+    // Synchronous dispatch is not allowed inside an update cycle; defer to the next tick.
     if (this.lastPos < 0) return
     const st = infoAtPos(this.view.state, Math.min(this.lastPos, this.view.state.doc.length))
     const key = st ? st.key : null
@@ -330,7 +292,7 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
   return pluginRef
 }
 
-// ---------- 对外接口 ----------
+// ---------- Public interface ----------
 export interface EditorCallbacks {
   onDocChanged: (update: ViewUpdate) => void
   onSelectionChanged: (update: ViewUpdate) => void
@@ -339,9 +301,9 @@ export interface EditorCallbacks {
 
 export interface EditorApi {
   view: EditorView
-  /** 分析结果落地：把后端 token_details 转换为内部 token（UTF-16 下标）并刷新装饰 */
+  /** Land analysis results: convert backend token_details to internal tokens (UTF-16 indices) and refresh decorations. */
   applyAnalysis: (data: PplResponse, cpMap: number[]) => void
-  /** 配置变化后重建装饰（颜色/样式/分块模式/分层窗口等） */
+  /** Rebuild decorations after setting changes (colors/style/chunk mode/layer window). */
   refreshDecorations: () => void
   getTokens: () => Token[]
   getIgnores: () => DocRange[]
@@ -364,7 +326,7 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
     const { tokens, ignores } = v.state.field(hmField)
     markIgnored(tokens, ignores)
     const stat = avgNllOfTokens(tokensInRange(tokens, sel.from, sel.to))
-    const html = `<div class="tip-label">选区（${sel.to - sel.from} 字符）</div>${statHtml(stat)}`
+    const html = `<div class="tip-label">${t('tooltip.selection', { chars: sel.to - sel.from })}</div>${statHtml(stat)}`
     const coords = v.coordsAtPos(sel.head) || v.coordsAtPos(sel.from)
     if (!coords) return
     showTip(selTip, html, (coords.left + coords.right) / 2, coords.top)
@@ -415,14 +377,14 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
   const api: EditorApi = {
     view,
 
-    /** 分析结果落地：把后端 token_details 转换为内部 token（UTF-16 下标）并刷新装饰 */
+    /** Land analysis results: convert backend char indices to UTF-16 offsets and refresh decorations. */
     applyAnalysis(data, cpMap) {
       const tokens: Token[] = []
       for (const d of data.token_details) {
         let start: number | null = d.char_start == null ? null : cpMap[d.char_start]
         let end: number | null = d.char_end == null ? null : cpMap[d.char_end]
         if (start == null || end == null) {
-          // 无法对齐的 token：零宽，挂在前一个 token 末尾
+          // Unalignable token: zero-width, attached at the previous token's end.
           start = end = tokens.length ? tokens[tokens.length - 1].end : 0
         }
         tokens.push({

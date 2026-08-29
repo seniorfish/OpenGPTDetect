@@ -1,10 +1,12 @@
-// 纯逻辑无头测试：node test/logic.test.ts
+// Headless pure-logic test: node test/logic.test.ts
 import assert from 'node:assert'
 import { EditorState } from '@codemirror/state'
 import type { ChangeSet } from '@codemirror/state'
-import { sentenceChunks, paragraphChunks, avgNllOfTokens, visibleTokenSet, tokensInRange } from '../src/chunks.ts'
+import {
+  sentenceChunks, paragraphChunks, avgNllOfTokens, visibleTokenSet, tokensInRange,
+  mapTokensThroughChanges, mapRangesThroughChanges
+} from '../src/chunks.ts'
 import { colorForPpl, hashText, buildCpToUtf16Map } from '../src/util.ts'
-import { mapTokensThroughChanges, mapRangesThroughChanges } from '../src/editor.ts'
 import type { Token } from '../src/types.ts'
 
 let passed = 0
@@ -14,12 +16,12 @@ function ok(name: string, fn: () => void): void {
   console.log('✓', name)
 }
 
-// ---------- 分块 ----------
+// ---------- Chunking ----------
 ok('句子分块：中英文标点与换行', () => {
   const chunks = sentenceChunks('你好，世界。abc,def\nghi')
   assert.deepStrictEqual(chunks, [
-    { start: 0, end: 3 },   // 你好，
-    { start: 3, end: 6 },   // 世界。
+    { start: 0, end: 3 },   // chunk for '你好，'
+    { start: 3, end: 6 },   // chunk for '世界。'
     { start: 6, end: 10 },  // abc,
     { start: 10, end: 14 }, // def\n
     { start: 14, end: 17 }  // ghi
@@ -35,7 +37,7 @@ ok('段落分块：按换行', () => {
   ])
 })
 
-// ---------- 颜色 ----------
+// ---------- Colors ----------
 const stops = [
   { ppl: 12, color: '#22c55e' },
   { ppl: 18, color: '#eab308' },
@@ -46,13 +48,13 @@ ok('颜色：低于最小节点取端点色', () => assert.strictEqual(colorForP
 ok('颜色：高于最大节点取端点色', () => assert.strictEqual(colorForPpl(500, stops), '#7f1d1d'))
 ok('颜色：节点处精确取值', () => assert.strictEqual(colorForPpl(18, stops), '#eab308'))
 ok('颜色：节点间渐变', () => {
-  const mid = colorForPpl(15, stops) // 12 绿与 18 黄的中点
+  const mid = colorForPpl(15, stops) // midpoint between 12-green and 18-yellow
   assert.notStrictEqual(mid, '#22c55e')
   assert.notStrictEqual(mid, '#eab308')
   assert.match(mid, /^#[0-9a-f]{6}$/)
 })
 
-// ---------- 统计 ----------
+// ---------- Statistics ----------
 ok('平均 NLL：跳过脏/忽略/null', () => {
   const tokens: Token[] = [
     { tokenIndex: 0, tokenId: 0, text: 'a', nll: 1, ppl: Math.E, start: 0, end: 1, stale: false, ignored: false },
@@ -72,14 +74,14 @@ ok('分层显示：n%-m% 区间', () => {
     stale: false, ignored: false, start: i, end: i + 1
   }))
   assert.strictEqual(visibleTokenSet(tokens, 0, 100).size, 10)
-  assert.strictEqual(visibleTokenSet(tokens, 0, 10).size, 1) // 最低 10%
+  assert.strictEqual(visibleTokenSet(tokens, 0, 10).size, 1) // lowest 10%
   const top = visibleTokenSet(tokens, 90, 100)
   assert.strictEqual(top.size, 1)
-  assert.strictEqual([...top][0].ppl, 100) // 最高 10%
+  assert.strictEqual([...top][0].ppl, 100) // highest 10%
   assert.strictEqual(visibleTokenSet(tokens, 50, 60).size, 1)
 })
 
-// ---------- 工具 ----------
+// ---------- Utilities ----------
 ok('hashText：稳定且区分', () => {
   assert.strictEqual(hashText('你好'), hashText('你好'))
   assert.notStrictEqual(hashText('你好'), hashText('你好！'))
@@ -88,11 +90,11 @@ ok('hashText：稳定且区分', () => {
 ok('码点→UTF-16 映射：emoji 占 2 码元', () => {
   const text = 'a😀b'
   const map = buildCpToUtf16Map(text)
-  // 码点 0='a'→0, 1='😀'→1, 2='b'→3, 3=末尾→4
+  // cp 0='a'->0, 1='😀'->1, 2='b'->3, 3=end->4
   assert.deepStrictEqual(map, [0, 1, 3, 4])
 })
 
-// ---------- 脏标记（需求 6 的场景） ----------
+// ---------- Dirty marking (requirement 6 scenarios) ----------
 function changeOf(doc: string, spec: { from: number; insert?: string; to?: number }): ChangeSet {
   const state = EditorState.create({ doc })
   return state.update({ changes: spec }).changes
@@ -103,7 +105,7 @@ const tk = (start: number, end: number, extra: Partial<Token> = {}): Token => ({
 })
 
 ok('文首插入前缀：原 token 后移且保持干净', () => {
-  // "你好"（token [0,2)），开头插入 "小明，"
+  // "你好" (token [0,2)); a prefix "小明，" is inserted at the start
   const changes = changeOf('你好', { from: 0, insert: '小明，' })
   const out = mapTokensThroughChanges([tk(0, 2)], changes)
   assert.strictEqual(out.length, 1)
@@ -112,7 +114,7 @@ ok('文首插入前缀：原 token 后移且保持干净', () => {
 })
 
 ok('删除 token 内一个字符：变脏', () => {
-  // "小明，你好" 中删除 "好"（位置 4..5），token "你好" [3,5)
+  // from "小明，你好" delete "好" (positions 4..5); token "你好" lives at [3,5)
   const changes = changeOf('小明，你好', { from: 4, to: 5 })
   const out = mapTokensThroughChanges([tk(3, 5)], changes)
   assert.strictEqual(out.length, 1)

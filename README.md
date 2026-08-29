@@ -13,7 +13,7 @@ Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machi
 |---|---|---|
 | **PPL analysis service** (backend) | `server/api.py` + `server/backends/` | FastAPI + llama.cpp, per-token NLL / PPL, cache-friendly two-step API, switchable backends |
 | **API contract** | `docs/api.md` | Server interface definitions, data models, field semantics |
-| **Web editor** | `editor/` | CodeMirror 6 perplexity text editor built with Vite, bundled into a single HTML file |
+| **Web editor** | `editor/` | CodeMirror 6 perplexity text editor built with Vite + Vue 3, bundled into a single HTML file |
 | **Chrome extension** | `extension/` | MV3 extension that shows page-text perplexity as heatmaps + annotations |
 
 All four consumers (editor, extension, curl/scripts, service tests) share one API contract — see `docs/api.md`.
@@ -71,7 +71,7 @@ The service has two layers; hardware needs are decided by the llama.cpp build an
 ```
 ├─ server/          # FastAPI service + pluggable backends (api.py, backends/, requirements, .env.example)
 ├─ docs/api.md      # API contract (routes, fields, error codes, FAQ)
-├─ editor/          # Vite + CodeMirror frontend
+├─ editor/          # Vite + Vue 3 + CodeMirror frontend
 ├─ extension/       # Chrome MV3 extension
 └─ README.md
 ```

@@ -178,6 +178,31 @@ interface Brush {
 
 let brush: Brush | null = null
 
+// Shared gesture-end teardown: release pointer capture and drop the drag state
+// so a cancelled pointer never leaves a stale brush or a stuck selection rect.
+function endBrush(svg: SVGSVGElement, e: PointerEvent, resolve: boolean): void {
+  if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId)
+  const current = brush
+  brush = null
+  if (!current) return
+  if (current.selEl) current.selEl.remove()
+  if (!resolve || !histoData.x) return
+  const px = e.clientX - current.rect.left
+  const [a, b] = [Math.min(current.startX, px), Math.max(current.startX, px)]
+  if (b - a < 4) return
+  const arr = histoData.arr
+  const lo = histoData.x.invX(a)
+  const hi = histoData.x.invX(b)
+  let below = 0, belowEq = 0
+  for (const v of arr) {
+    if (v < lo) below++
+    if (v <= hi) belowEq++
+  }
+  const n = (below / arr.length) * 100
+  const m = Math.max((belowEq / arr.length) * 100, n + 1)
+  setWindow(n, m)
+}
+
 function attachBrush(svg: SVGSVGElement): void {
   svg.addEventListener('pointerdown', (e) => {
     if (settings.chunkMode !== 'token' || !histoData.x || !histoData.arr.length) return
@@ -202,26 +227,14 @@ function attachBrush(svg: SVGSVGElement): void {
   })
 }
 
-// Pointer-up resolves the dragged range into a percentile window.
+// Pointer-up resolves the dragged range into a percentile window; pointer-cancel
+// only tears the drag state down and never commits a window.
 function attachBrushUp(svg: SVGSVGElement): void {
   svg.addEventListener('pointerup', (e) => {
-    if (!brush) return
-    const px = e.clientX - brush.rect.left
-    const [a, b] = [Math.min(brush.startX, px), Math.max(brush.startX, px)]
-    if (brush.selEl) brush.selEl.remove()
-    brush = null
-    if (b - a < 4 || !histoData.x) return
-    const arr = histoData.arr
-    const lo = histoData.x.invX(a)
-    const hi = histoData.x.invX(b)
-    let below = 0, belowEq = 0
-    for (const v of arr) {
-      if (v < lo) below++
-      if (v <= hi) belowEq++
-    }
-    const n = (below / arr.length) * 100
-    const m = Math.max((belowEq / arr.length) * 100, n + 1)
-    setWindow(n, m)
+    endBrush(svg, e, true)
+  })
+  svg.addEventListener('pointercancel', (e) => {
+    endBrush(svg, e, false)
   })
 }
 

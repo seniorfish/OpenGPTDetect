@@ -16,21 +16,13 @@ Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machi
 | **Web editor** | `editor/` | CodeMirror 6 perplexity text editor built with Vite, bundled into a single HTML file |
 | **Chrome extension** | `extension/` | MV3 extension that shows page-text perplexity as heatmaps + annotations |
 
-## Architecture
-
-```
-Web editor (editor/)     ─┐
-Chrome extension  (extension/) ├─ HTTP/JSON ─► server/api.py ─► (backend) ─► llama.cpp ─► local GGUF model
-curl / scripts           ─┘                (FastAPI, global serialization lock)
-```
-
-All four consumers share one API contract — see `docs/api.md`.
+All four consumers (editor, extension, curl/scripts, service tests) share one API contract — see `docs/api.md`.
 
 ## Quick start
 
 ### 1. Get a model
 
-Download any GGUF-format causal language model, e.g. a quantized Qwen or Llama GGUF.
+Download the [Qwen3.5-9B-Base-i1-GGUF](https://huggingface.co/mradermacher/Qwen3.5-9B-Base-i1-GGUF) quantized GGUF — or any other GGUF-format causal language model. **Use a Base model**: chat/instruct fine-tunes carry chat-template artifacts that muddy per-token perplexity.
 
 ### 2. Start the service
 

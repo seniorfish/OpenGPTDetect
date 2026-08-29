@@ -16,21 +16,13 @@
 | **页面编辑器** | `editor/` | Vite + CodeMirror 6 的困惑度文本编辑器，构建为单个 HTML |
 | **Chrome 插件** | `extension/` | MV3 插件，在网页上以热力图 + 标注显示文本困惑度 |
 
-## 架构
-
-```
-浏览器页面 (editor/)  ─┐
-Chrome 插件 (extension/) ├─ HTTP/JSON ─► server/api.py ─► (后端) ─► llama.cpp ─► GGUF 模型（本地）
-curl / 脚本            ─┘                    （FastAPI，全局串行锁）
-```
-
-四个端共享同一份 API 契约，见 `docs/api.md`。
+四个端（编辑器、插件、curl/脚本、服务测试）共享同一份 API 契约，见 `docs/api.md`。
 
 ## 快速开始
 
 ### 1. 准备模型
 
-下载任意 GGUF 格式的因果语言模型，例如 Qwen、Llama 系列的 GGUF 量化版。
+下载 [Qwen3.5-9B-Base-i1-GGUF](https://huggingface.co/mradermacher/Qwen3.5-9B-Base-i1-GGUF) 量化 GGUF（或其它 GGUF 格式的因果语言模型）。**请使用 Base 模型**：chat / instruct 微调版会引入对话模板噪声，污染逐 token 困惑度信号。
 
 ### 2. 启动服务
 

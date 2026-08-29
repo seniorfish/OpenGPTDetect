@@ -2,8 +2,9 @@
 // Responsibilities: text editing, undo/redo, the heat-map decoration layer,
 // stale-token tracking, and hover/selection tooltips.
 import { EditorState, StateField, StateEffect, Prec } from '@codemirror/state'
-import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers } from '@codemirror/view'
+import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers, WidgetType } from '@codemirror/view'
 import type { Transaction } from '@codemirror/state'
+import type { Range } from '@codemirror/state'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { settings } from './composables/useSettings.ts'
@@ -45,27 +46,88 @@ function ignoredStyle(): string {
 }
 
 // ---------- Decoration construction ----------
+
+/** Inline newline glyph: rendered at every covered '\n' so breaks are visible
+ *  and hoverable; its background matches the covering mark's heat color. */
+class BreakWidget extends WidgetType {
+  style: string
+  pos: number
+
+  constructor(style: string, pos: number) {
+    super()
+    this.style = style
+    this.pos = pos
+  }
+
+  eq(other: BreakWidget): boolean {
+    return other.style === this.style && other.pos === this.pos
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'cm-br'
+    if (this.style) span.setAttribute('style', this.style)
+    span.dataset.br = String(this.pos)
+    span.textContent = '¶'
+    return span
+  }
+
+  ignoreEvent(): boolean {
+    return true // do not trigger cursor movement or selection on the glyph
+  }
+}
+
+function breakStyleFor(hex: string): string {
+  return `background-color: ${rgba(hex, settings.opacity)}; color: rgba(20, 24, 28, 0.35)`
+}
+
+function ignoredBreakStyle(): string {
+  return `background-color: ${rgba(GRAY, 0.12)}; color: rgba(138, 138, 138, 0.9)`
+}
+
+/** Positions of '\n' characters inside the half-open doc range [from, to). */
+function newlinePositions(state: EditorState, from: number, to: number): number[] {
+  const out: number[] = []
+  const doc = state.doc
+  const lo = Math.max(0, Math.min(from, doc.length))
+  const hi = Math.min(to, doc.length)
+  if (hi <= lo) return out
+  let line = doc.lineAt(lo)
+  while (line.number <= doc.lines) {
+    const br = line.to
+    if (br >= hi) break
+    // br is the newline char position on every line but the document's last one.
+    if (br >= lo && line.number < doc.lines) out.push(br)
+    if (line.number >= doc.lines) break
+    line = doc.line(line.number + 1)
+  }
+  return out
+}
+
 function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null }): DecorationSet {
   const { tokens, ignores, hoverKey } = data
   const text = state.doc.toString()
   if (!text) return Decoration.none
 
   markIgnored(tokens, ignores)
-  const marks: Array<{ start: number; end: number; cls: string; style: string }> = []
-  const addMark = (start: number, end: number, cls: string, style: string): void => {
-    if (end > start) marks.push({ start, end, cls, style })
+  const marks: Array<{ start: number; end: number; cls: string; style: string; brk: string | null }> = []
+  const addMark = (start: number, end: number, cls: string, style: string, brk: string | null): void => {
+    if (end > start) marks.push({ start, end, cls, style, brk })
   }
+  const IGNORED_BRK = ignoredBreakStyle()
+  const GRAY_BRK = breakStyleFor(GRAY)
 
   if (settings.chunkMode === 'token') {
     const visible = visibleTokenSet(tokens, settings.windowN, settings.windowM)
     for (const tk of tokens) {
       const hoverCls = hoverKey === `t${tk.tokenIndex}` ? ' hm-hover' : ''
       if (tk.ignored) {
-        addMark(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle())
+        addMark(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (tk.stale || tk.ppl == null) {
-        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY))
+        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
       } else if (visible.has(tk)) {
-        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(colorForPpl(tk.ppl, settings.stops)))
+        const hex = colorForPpl(tk.ppl, settings.stops)
+        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
       }
       // Tokens filtered out by the layered window get no decoration (heat map hidden).
     }
@@ -75,38 +137,66 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
       .filter((tk) => tk.end > tk.start)
       .map((tk) => [tk.start, tk.end] as [number, number])
       .sort((a, b) => a[0] - b[0])
-    const gaps: Array<{ start: number; end: number; cls: string; style: string }> = []
+    const gaps: Array<{ start: number; end: number; cls: string; style: string; brk: string | null }> = []
     let cur = 0
     for (const [s, e] of covered) {
-      if (s > cur) gaps.push({ start: cur, end: s, cls: 'hm', style: heatStyle(GRAY) })
+      if (s > cur) gaps.push({ start: cur, end: s, cls: 'hm', style: heatStyle(GRAY), brk: GRAY_BRK })
       cur = Math.max(cur, e)
     }
-    if (cur < text.length) gaps.push({ start: cur, end: text.length, cls: 'hm', style: heatStyle(GRAY) })
+    if (cur < text.length) gaps.push({ start: cur, end: text.length, cls: 'hm', style: heatStyle(GRAY), brk: GRAY_BRK })
     marks.push(...gaps)
   } else {
     const chunks = buildChunks(text, tokens, settings.chunkMode)
     for (const c of chunks) {
       const hoverCls = hoverKey === `c${c.start}-${c.end}` ? ' hm-hover' : ''
       if (c.ignored) {
-        addMark(c.start, c.end, 'hm hm-ignored' + hoverCls, ignoredStyle())
+        addMark(c.start, c.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (!c.stat) {
-        addMark(c.start, c.end, 'hm' + hoverCls, heatStyle(GRAY))
+        addMark(c.start, c.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
       } else {
-        addMark(c.start, c.end, 'hm' + hoverCls, heatStyle(colorForPpl(c.stat.ppl, settings.stops)))
+        const hex = colorForPpl(c.stat.ppl, settings.stops)
+        addMark(c.start, c.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
       }
     }
   }
 
-  // RangeSetBuilder requires strictly increasing, non-overlapping ranges.
+  // Build marks: strictly increasing, non-overlapping ranges (RangeSet requirement).
   marks.sort((a, b) => a.start - b.start || a.end - b.end)
-  const ranges = []
+  const markRanges: Range<Decoration>[] = []
   let lastEnd = -1
   for (const m of marks) {
     if (m.start < lastEnd) continue
-    ranges.push(Decoration.mark({ class: m.cls, attributes: { style: m.style } }).range(m.start, m.end))
+    markRanges.push(Decoration.mark({ class: m.cls, attributes: { style: m.style } }).range(m.start, m.end))
     lastEnd = m.end
   }
-  return Decoration.set(ranges)
+
+  // Newline glyphs: one point decoration per covered break, colored like its mark.
+  const widgetRanges: Range<Decoration>[] = []
+  for (const m of marks) {
+    if (!m.brk) continue
+    for (const p of newlinePositions(state, m.start, m.end)) {
+      widgetRanges.push(Decoration.widget({ widget: new BreakWidget(m.brk, p), side: -1 }).range(p))
+    }
+  }
+
+  // RangeSet requires ranges sorted by `from`, then by `startSide`; widgets have
+  // startSide -1 so they must come before a mark sharing the same position.
+  const sideOrder = (a: Range<Decoration>, b: Range<Decoration>): number =>
+    a.from - b.from || a.value.startSide - b.value.startSide
+  widgetRanges.sort(sideOrder)
+
+  // Merge the two sorted sequences into one sorted set (a widget may sit inside a mark).
+  const merged: Range<Decoration>[] = []
+  let i = 0
+  let j = 0
+  while (i < markRanges.length || j < widgetRanges.length) {
+    if (j >= widgetRanges.length || (i < markRanges.length && sideOrder(markRanges[i], widgetRanges[j]) <= 0)) {
+      merged.push(markRanges[i++])
+    } else {
+      merged.push(widgetRanges[j++])
+    }
+  }
+  return Decoration.set(merged)
 }
 
 // ---------- Heat-map state field ----------
@@ -193,7 +283,12 @@ function infoAtPos(state: EditorState, pos: number): { key: string; label: strin
   if (!text) return null
   markIgnored(tokens, ignores)
   if (settings.chunkMode === 'token') {
-    const tk = tokens.find((tm) => (tm.end > tm.start ? tm.start <= pos && pos < tm.end : tm.start === pos))
+    // Prefer a real (non-zero-width) token covering the position; only fall back
+    // to a zero-width token pinned exactly at it. This stops hover from latching
+    // onto degenerate tokens at chunk boundaries (e.g. line-end positions).
+    const tk =
+      tokens.find((tm) => (tm.end > tm.start ? tm.start <= pos && pos < tm.end : false)) ??
+      tokens.find((tm) => tm.end <= tm.start && tm.start === pos)
     if (!tk) return null
     const suffix = tk.ignored ? t('tooltip.ignored') : tk.stale ? t('tooltip.stale') : ''
     const stat = tk.ignored || tk.stale || tk.nll == null || tk.ppl == null
@@ -210,6 +305,28 @@ function infoAtPos(state: EditorState, pos: number): { key: string; label: strin
     label: name + (c.ignored ? t('tooltip.ignored') : ''),
     stat: c.ignored ? null : c.stat
   }
+}
+
+/**
+ * Whether the pointer sits on rendered line text. Positions that map to the
+ * empty margin around a line (line start/end whitespace, blank lines) are
+ * rejected so no tooltip appears where no measurable text is visible.
+ * Explanation: `posAtCoords` maps coordinates in the empty margin to adjacent
+ * line-boundary document positions, which otherwise line up with neighboring
+ * chunks/tokens. `coordsAtPos` returns client rects, i.e. the same space as
+ * clientX/clientY, so comparing the two rejects those margins.
+ */
+function isPointerOnText(view: EditorView, pos: number, x: number, y: number): boolean {
+  const line = view.state.doc.lineAt(pos)
+  const start = view.coordsAtPos(line.from)
+  if (!start) return true // cannot measure: fall back to showing rather than hiding
+  const end = view.coordsAtPos(line.to)
+  // Horizontal span of the line's text: from the first character's left edge to
+  // the caret box just past the last character. Vertical span from the same
+  // client rects (coordsAtPos returns client coordinates, like clientX/Y).
+  const TOL = 2 // small tolerance so the caret edge feels inclusive
+  const right = end ? Math.max(end.left, end.right) : start.right
+  return x >= start.left - TOL && x <= right + TOL && y >= start.top && y <= start.bottom
 }
 
 /** Hover plugin: mousemove locates the chunk, highlights it, and pops its PPL tooltip. */
@@ -257,8 +374,36 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
       mousemove(event, view) {
         const plugin = view.plugin(pluginRef!)
         if (!plugin) return
+
+        // Newline glyph hover: the break is a real (decorated) position, so show
+        // its covering chunk like any other character. The event target can be
+        // the glyph's text node, so climb to the element before matching.
+        const node = event.target as Node | null
+        const el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element | null)
+        const br = el ? el.closest('.cm-br') : null
+        if (br) {
+            plugin.lastPos = -1 // glyph hover does not track a plain pos
+            const pos = Number((br as HTMLElement).dataset.br)
+            const st = Number.isFinite(pos) ? infoAtPos(view.state, pos) : null
+            const key = st ? st.key : null
+            if (key !== plugin.key) plugin.setKey(key)
+            if (st) {
+              showTip(
+                hoverTip,
+                `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
+                event.clientX,
+                event.clientY
+              )
+            } else {
+              hideTip(hoverTip)
+            }
+            return
+          }
+
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-        if (pos == null) {
+        if (pos == null || !isPointerOnText(view, pos, event.clientX, event.clientY)) {
+          // Pointer over empty margin (line start/end whitespace, blank line):
+          // nothing measurable is under the cursor, so suppress the tooltip.
           plugin.lastPos = -1
           plugin.setKey(null)
           hideTip(hoverTip)

@@ -99,7 +99,8 @@ async function analyze(manual = false): Promise<void> {
     }
   } finally {
     state.inFlight = false
-    updateStatusBar()
+    refreshStats()
+    updateCursor()
     if (state.pendingAnalyze) {
       state.pendingAnalyze = false
       if (settings.autoRefresh) scheduleAutoAnalyze()
@@ -143,15 +144,27 @@ function setIgnores(ranges: Array<{ start: number; end: number }>): void {
 
 // ---------- Derived data refresh (status bar / histogram) ----------
 function refreshDerived(): void {
-  updateStatusBar()
+  refreshStats()
+  updateCursor()
   state.drawTick++
 }
 
-function updateStatusBar(): void {
+/** Refresh the caret line/column only. Cheap: no full text materialization. */
+function updateCursor(): void {
   if (!editor) return
   const view = editor.view
   const doc = view.state.doc
-  const text = doc.toString()
+  const head = view.state.selection.main.head
+  const line = doc.lineAt(head)
+  state.cursorLine = line.number
+  state.cursorCol = head - line.from + 1
+}
+
+/** Recompute the document aggregate statistics shown in the status bar. */
+function refreshStats(): void {
+  if (!editor) return
+  const doc = editor.view.state.doc
+  const len = doc.length
   const tokens = editor.getTokens()
   const merged = mergeIgnoreRanges(editor.getIgnores())
   const stat = avgNllOfTokens(tokens, merged)
@@ -160,14 +173,10 @@ function updateStatusBar(): void {
   for (const tk of tokens) {
     if (!tk.stale && !isIgnored(tk.start, tk.end, merged)) covered += Math.max(0, tk.end - tk.start)
   }
-  const head = view.state.selection.main.head
-  const line = doc.lineAt(head)
-  state.charCount = text.length
+  state.charCount = len
   state.avgNll = stat ? stat.nll : null
   state.avgPpl = stat ? stat.ppl : null
-  state.coverage = text.length ? Math.min(100, (covered / text.length) * 100) : null
-  state.cursorLine = line.number
-  state.cursorCol = head - line.from + 1
+  state.coverage = len ? Math.min(100, (covered / len) * 100) : null
 }
 
 // ---------- Health check ----------
@@ -175,7 +184,7 @@ async function checkHealth(): Promise<void> {
   const h = await api.health()
   state.health = h
   if (h && h.max_char_count) state.maxChars = h.max_char_count
-  updateStatusBar()
+  refreshStats()
 }
 
 function startHealthPolling(): void {
@@ -205,10 +214,11 @@ function autoRefreshChanged(on: boolean): void {
 function initEditor(parent: HTMLElement): void {
   editor = createEditor(parent, {
     onDocChanged: () => {
-      refreshDerived()
+      refreshStats()
+      updateCursor()
       if (settings.autoRefresh) scheduleAutoAnalyze()
     },
-    onSelectionChanged: () => updateStatusBar(),
+    onSelectionChanged: () => updateCursor(),
     onAnalyze: () => analyze(true)
   }, () => settings)
   refreshDerived()

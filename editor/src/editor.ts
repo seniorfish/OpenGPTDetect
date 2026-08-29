@@ -2,7 +2,7 @@
 // Responsibilities: text editing, undo/redo, the heat-map decoration layer,
 // stale-token tracking, and hover/selection tooltips.
 import { EditorState, StateField, StateEffect, Prec } from '@codemirror/state'
-import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers, WidgetType } from '@codemirror/view'
+import { EditorView, keymap, drawSelection, Decoration, ViewPlugin, lineNumbers } from '@codemirror/view'
 import type { Transaction } from '@codemirror/state'
 import type { Range } from '@codemirror/state'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
@@ -45,37 +45,12 @@ function ignoredStyle(): string {
   return `background-color: ${rgba(GRAY, 0.12)}; border-bottom: 1px dotted ${GRAY}`
 }
 
-// ---------- Decoration construction ----------
-
-/** Inline newline glyph: rendered at every covered '\n' so breaks are visible
- *  and hoverable; its background matches the covering mark's heat color. */
-class BreakWidget extends WidgetType {
-  style: string
-  pos: number
-
-  constructor(style: string, pos: number) {
-    super()
-    this.style = style
-    this.pos = pos
-  }
-
-  eq(other: BreakWidget): boolean {
-    return other.style === this.style && other.pos === this.pos
-  }
-
-  toDOM(): HTMLElement {
-    const span = document.createElement('span')
-    span.className = 'cm-br'
-    if (this.style) span.setAttribute('style', this.style)
-    span.dataset.br = String(this.pos)
-    span.textContent = '¶'
-    return span
-  }
-
-  ignoreEvent(): boolean {
-    return true // do not trigger cursor movement or selection on the glyph
-  }
-}
+// ---------- Line-break overlay (non-editing display) ----------
+// The '\n' stays a layout character invisible to editing. To still surface each
+// covered break as a colored, hoverable glyph, we draw it in a separate absolute
+// layer (`.cm-break-layer`) that is `pointer-events: none`, so caret/selection
+// semantics remain native. Positions are re-measured whenever CodeMirror runs its
+// measure pass (edits, analysis, settings, scrolling).
 
 function breakStyleFor(hex: string): string {
   return `background-color: ${rgba(hex, settings.opacity)}; color: rgba(20, 24, 28, 0.35)`
@@ -104,15 +79,63 @@ function newlinePositions(state: EditorState, from: number, to: number): number[
   return out
 }
 
-function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null }): DecorationSet {
-  const { tokens, ignores, hoverKey } = data
+/** Content origin of the scroller, in client coordinates (LTR text). */
+function contentOrigin(view: EditorView): { left: number; top: number } {
+  const rect = view.scrollDOM.getBoundingClientRect()
+  return {
+    left: rect.left - view.scrollDOM.scrollLeft * view.scaleX,
+    top: rect.top - view.scrollDOM.scrollTop * view.scaleY
+  }
+}
+
+/** Break rectangles exposed for hover lookup (client coordinates). */
+let breakHoverAreas: Array<{ pos: number; left: number; right: number; top: number; bottom: number }> = []
+
+/** Newline pos currently hovered (drives the '¶' outline), or null. */
+let hoveredBreakPos: number | null = null
+
+/** Toggle the hover outline class on the matching '¶' glyph in the overlay. */
+function setBreakHover(pos: number | null): void {
+  if (pos === hoveredBreakPos) return
+  const layer = document.querySelector('.cm-break-layer')
+  if (layer) {
+    if (hoveredBreakPos != null) {
+      layer.querySelector(`.cm-br[data-br="${hoveredBreakPos}"]`)?.classList.remove('cm-br-hover')
+    }
+  }
+  hoveredBreakPos = pos
+  if (layer && pos != null) {
+    layer.querySelector(`.cm-br[data-br="${pos}"]`)?.classList.add('cm-br-hover')
+  }
+}
+
+interface CoverageResult {
+  marks: Array<{ start: number; end: number; cls: string; style: string }>
+  breaks: Array<{ pos: number; style: string }>
+}
+
+/** Shared coverage pass used both by the heat-map decoration and the overlay. */
+function computeCoverage(
+  state: EditorState,
+  tokens: Token[],
+  ignores: DocRange[],
+  hoverKey: string | null
+): CoverageResult {
+  const marks: Array<{ start: number; end: number; cls: string; style: string }> = []
+  const breaks: Array<{ pos: number; style: string }> = []
   const text = state.doc.toString()
-  if (!text) return Decoration.none
+  if (!text) return { marks, breaks }
 
   markIgnored(tokens, ignores)
-  const marks: Array<{ start: number; end: number; cls: string; style: string; brk: string | null }> = []
-  const addMark = (start: number, end: number, cls: string, style: string, brk: string | null): void => {
-    if (end > start) marks.push({ start, end, cls, style, brk })
+  const addCovered = (from: number, to: number, cls: string, style: string, brkStyle: string): void => {
+    if (to <= from) return
+    let cur = from
+    for (const p of newlinePositions(state, from, to)) {
+      if (cur < p) marks.push({ start: cur, end: p, cls, style })
+      breaks.push({ pos: p, style: brkStyle })
+      cur = p + 1
+    }
+    if (cur < to) marks.push({ start: cur, end: to, cls, style })
   }
   const IGNORED_BRK = ignoredBreakStyle()
   const GRAY_BRK = breakStyleFor(GRAY)
@@ -122,12 +145,12 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
     for (const tk of tokens) {
       const hoverCls = hoverKey === `t${tk.tokenIndex}` ? ' hm-hover' : ''
       if (tk.ignored) {
-        addMark(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
+        addCovered(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (tk.stale || tk.ppl == null) {
-        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
+        addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
       } else if (visible.has(tk)) {
         const hex = colorForPpl(tk.ppl, settings.stops)
-        addMark(tk.start, tk.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
+        addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
       }
       // Tokens filtered out by the layered window get no decoration (heat map hidden).
     }
@@ -137,28 +160,109 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
       .filter((tk) => tk.end > tk.start)
       .map((tk) => [tk.start, tk.end] as [number, number])
       .sort((a, b) => a[0] - b[0])
-    const gaps: Array<{ start: number; end: number; cls: string; style: string; brk: string | null }> = []
     let cur = 0
     for (const [s, e] of covered) {
-      if (s > cur) gaps.push({ start: cur, end: s, cls: 'hm', style: heatStyle(GRAY), brk: GRAY_BRK })
+      if (s > cur) addCovered(cur, s, 'hm', heatStyle(GRAY), GRAY_BRK)
       cur = Math.max(cur, e)
     }
-    if (cur < text.length) gaps.push({ start: cur, end: text.length, cls: 'hm', style: heatStyle(GRAY), brk: GRAY_BRK })
-    marks.push(...gaps)
+    if (cur < text.length) addCovered(cur, text.length, 'hm', heatStyle(GRAY), GRAY_BRK)
   } else {
     const chunks = buildChunks(text, tokens, settings.chunkMode)
     for (const c of chunks) {
       const hoverCls = hoverKey === `c${c.start}-${c.end}` ? ' hm-hover' : ''
       if (c.ignored) {
-        addMark(c.start, c.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
+        addCovered(c.start, c.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (!c.stat) {
-        addMark(c.start, c.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
+        addCovered(c.start, c.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
       } else {
         const hex = colorForPpl(c.stat.ppl, settings.stops)
-        addMark(c.start, c.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
+        addCovered(c.start, c.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
       }
     }
   }
+  return { marks, breaks }
+}
+
+/** Rebuild the break overlay DOM for the current view state. */
+function redrawBreakOverlay(view: EditorView, dom: HTMLElement): void {
+  try {
+    breakHoverAreas = []
+    const field = view.state.field(hmField)
+    const { breaks } = computeCoverage(view.state, field.tokens, field.ignores, null)
+    const base = contentOrigin(view)
+    const keep = new Set<string>()
+    for (const b of breaks) {
+      const rect = view.coordsAtPos(b.pos)
+      if (!rect) continue
+      const key = String(b.pos)
+      keep.add(key)
+      // The glyph is drawn from the caret slot rightwards; keep the hover hit
+      // area wide enough for the visible '¶'.
+      breakHoverAreas.push({ pos: b.pos, left: rect.left - 3, right: rect.left + 16, top: rect.top, bottom: rect.bottom })
+      let el = dom.querySelector<HTMLElement>(`.cm-br[data-br="${key}"]`)
+      if (!el) {
+        el = document.createElement('div')
+        el.className = 'cm-br'
+        el.dataset.br = key
+        el.textContent = '¶'
+        dom.appendChild(el)
+      }
+      el.setAttribute('style', `${b.style}; left: ${rect.left - base.left}px; top: ${rect.top - base.top}px; height: ${rect.bottom - rect.top}px`)
+      el.classList.toggle('cm-br-hover', hoveredBreakPos === b.pos)
+    }
+    for (const ch of [...dom.children]) {
+      if (!keep.has((ch as HTMLElement).dataset.br ?? '')) ch.remove()
+    }
+  } catch (err) {
+    console.error('break overlay error:', err)
+  }
+}
+
+/**
+ * Self-managed overlay for newline glyphs. Redrawn on every edit/analysis/setting
+ * change and on scroll, and kept fully pointer-transparent, so caret and selection
+ * semantics of the code editor are untouched.
+ */
+class BreakOverlay {
+  view: EditorView
+  dom: HTMLDivElement
+
+  constructor(view: EditorView) {
+    this.view = view
+    this.dom = document.createElement('div')
+    this.dom.className = 'cm-break-layer'
+    view.scrollDOM.appendChild(this.dom)
+    view.scrollDOM.addEventListener('scroll', this.redraw)
+    requestAnimationFrame(() => this.redraw())
+  }
+
+  update(update: ViewUpdate): void {
+    if (
+      update.docChanged ||
+      update.transactions.some((tr) =>
+        tr.effects.some((e) => e.is(setTokensEffect) || e.is(setIgnoresEffect) || e.is(refreshEffect))
+      )
+    ) {
+      this.redraw()
+    }
+  }
+
+  redraw = (): void => {
+    redrawBreakOverlay(this.view, this.dom)
+  }
+
+  destroy(): void {
+    this.view.scrollDOM.removeEventListener('scroll', this.redraw)
+    this.dom.remove()
+  }
+}
+
+/** Editor extension that paints the line-break overlay. */
+export const breakOverlayPlugin = ViewPlugin.fromClass(BreakOverlay)
+
+// ---------- Decoration construction ----------
+function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null }): DecorationSet {
+  const { marks } = computeCoverage(state, data.tokens, data.ignores, data.hoverKey)
 
   // Build marks: strictly increasing, non-overlapping ranges (RangeSet requirement).
   marks.sort((a, b) => a.start - b.start || a.end - b.end)
@@ -169,34 +273,7 @@ function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRang
     markRanges.push(Decoration.mark({ class: m.cls, attributes: { style: m.style } }).range(m.start, m.end))
     lastEnd = m.end
   }
-
-  // Newline glyphs: one point decoration per covered break, colored like its mark.
-  const widgetRanges: Range<Decoration>[] = []
-  for (const m of marks) {
-    if (!m.brk) continue
-    for (const p of newlinePositions(state, m.start, m.end)) {
-      widgetRanges.push(Decoration.widget({ widget: new BreakWidget(m.brk, p), side: -1 }).range(p))
-    }
-  }
-
-  // RangeSet requires ranges sorted by `from`, then by `startSide`; widgets have
-  // startSide -1 so they must come before a mark sharing the same position.
-  const sideOrder = (a: Range<Decoration>, b: Range<Decoration>): number =>
-    a.from - b.from || a.value.startSide - b.value.startSide
-  widgetRanges.sort(sideOrder)
-
-  // Merge the two sorted sequences into one sorted set (a widget may sit inside a mark).
-  const merged: Range<Decoration>[] = []
-  let i = 0
-  let j = 0
-  while (i < markRanges.length || j < widgetRanges.length) {
-    if (j >= widgetRanges.length || (i < markRanges.length && sideOrder(markRanges[i], widgetRanges[j]) <= 0)) {
-      merged.push(markRanges[i++])
-    } else {
-      merged.push(widgetRanges[j++])
-    }
-  }
-  return Decoration.set(merged)
+  return Decoration.set(markRanges)
 }
 
 // ---------- Heat-map state field ----------
@@ -375,31 +452,35 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
         const plugin = view.plugin(pluginRef!)
         if (!plugin) return
 
-        // Newline glyph hover: the break is a real (decorated) position, so show
-        // its covering chunk like any other character. The event target can be
-        // the glyph's text node, so climb to the element before matching.
-        const node = event.target as Node | null
-        const el = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element | null)
-        const br = el ? el.closest('.cm-br') : null
-        if (br) {
-            plugin.lastPos = -1 // glyph hover does not track a plain pos
-            const pos = Number((br as HTMLElement).dataset.br)
-            const st = Number.isFinite(pos) ? infoAtPos(view.state, pos) : null
-            const key = st ? st.key : null
-            if (key !== plugin.key) plugin.setKey(key)
-            if (st) {
-              showTip(
-                hoverTip,
-                `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
-                event.clientX,
-                event.clientY
-              )
-            } else {
-              hideTip(hoverTip)
-            }
-            return
+        // Newline overlay hover: if the pointer sits on a break glyph rectangle,
+        // show that break's covering chunk (same info as any other position).
+        const brHit = breakHoverAreas.find(
+          (a) =>
+            event.clientX >= a.left - 2 &&
+            event.clientX <= a.right + 2 &&
+            event.clientY >= a.top &&
+            event.clientY <= a.bottom
+        )
+        if (brHit) {
+          plugin.lastPos = -1 // overlay hover does not track a plain pos
+          setBreakHover(brHit.pos)
+          const st = infoAtPos(view.state, brHit.pos)
+          const key = st ? st.key : null
+          if (key !== plugin.key) plugin.setKey(key)
+          if (st) {
+            showTip(
+              hoverTip,
+              `<div class="tip-label">${escapeHtml(st.label)}</div>${statHtml(st.stat)}`,
+              event.clientX,
+              event.clientY
+            )
+          } else {
+            hideTip(hoverTip)
           }
+          return
+        }
 
+        setBreakHover(null)
         const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
         if (pos == null || !isPointerOnText(view, pos, event.clientX, event.clientY)) {
           // Pointer over empty margin (line start/end whitespace, blank line):
@@ -430,6 +511,7 @@ function buildHoverPlugin(): ViewPlugin<Hover> {
           plugin.lastPos = -1
           plugin.setKey(null)
         }
+        setBreakHover(null)
         hideTip(hoverTip)
       }
     }
@@ -508,6 +590,7 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
       keymap.of([...defaultKeymap, ...historyKeymap]),
       hmField,
       buildHoverPlugin(),
+      breakOverlayPlugin,
       updateListener,
       EditorView.theme({
         '&': { height: '100%' },

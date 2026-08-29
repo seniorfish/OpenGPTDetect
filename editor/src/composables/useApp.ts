@@ -210,7 +210,7 @@ function initEditor(parent: HTMLElement): void {
     },
     onSelectionChanged: () => updateStatusBar(),
     onAnalyze: () => analyze(true)
-  })
+  }, () => settings)
   refreshDerived()
 }
 

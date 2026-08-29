@@ -7,14 +7,13 @@ import type { Transaction } from '@codemirror/state'
 import type { Range } from '@codemirror/state'
 import type { DecorationSet, ViewUpdate } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands'
-import { settings } from './composables/useSettings.ts'
 import { rgba, clamp, colorForPpl, escapeHtml } from './util.ts'
 import { t } from './i18n.ts'
 import {
   buildChunks, mergeIgnoreRanges, isIgnored, visibleTokenSet, avgNllOfTokens, tokensInRange,
   mapTokensThroughChanges, mapRangesThroughChanges
 } from './chunks.ts'
-import type { Token, Range as DocRange, PplResponse, StatResult } from './types.ts'
+import type { Token, Range as DocRange, PplResponse, StatResult, EditorConfig } from './types.ts'
 
 const GRAY = '#8a8a8a' // color for unmeasured/stale data
 
@@ -23,14 +22,27 @@ const setTokensEffect = StateEffect.define<{ tokens: Token[] }>() // analysis re
 const setIgnoresEffect = StateEffect.define<{ ranges: DocRange[] }>() // ignores updated
 const setHoverEffect = StateEffect.define<{ key: string | null }>() // hovered chunk key
 const refreshEffect = StateEffect.define<null>() // setting change: rebuild decorations
+const setConfigEffect = StateEffect.define<EditorConfig>() // injected config lands
+
+/** Fallback config used for the freshly-created state field, before createEditor injects the real one. */
+const DEFAULT_EDITOR_CONFIG: EditorConfig = {
+  chunkMode: 'sentence',
+  style: 'background',
+  opacity: 0.45,
+  stops: [],
+  windowN: 0,
+  windowM: 100,
+  fontSize: 16,
+  fontFamily: "'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif"
+}
 
 // ---------- Decoration styles ----------
-function heatStyle(hex: string): string {
+function heatStyle(hex: string, config: EditorConfig): string {
   const parts: string[] = []
-  if (settings.style === 'background' || settings.style === 'both') {
-    parts.push(`background-color: ${rgba(hex, settings.opacity)}`)
+  if (config.style === 'background' || config.style === 'both') {
+    parts.push(`background-color: ${rgba(hex, config.opacity)}`)
   }
-  if (settings.style === 'underline' || settings.style === 'both') {
+  if (config.style === 'underline' || config.style === 'both') {
     parts.push(
       'text-decoration: underline',
       `text-decoration-color: ${hex}`,
@@ -52,8 +64,8 @@ function ignoredStyle(): string {
 // semantics remain native. Positions are re-measured whenever CodeMirror runs its
 // measure pass (edits, analysis, settings, scrolling).
 
-function breakStyleFor(hex: string): string {
-  return `background-color: ${rgba(hex, settings.opacity)}; color: rgba(20, 24, 28, 0.35)`
+function breakStyleFor(hex: string, config: EditorConfig): string {
+  return `background-color: ${rgba(hex, config.opacity)}; color: rgba(20, 24, 28, 0.35)`
 }
 
 function ignoredBreakStyle(): string {
@@ -107,7 +119,8 @@ function computeCoverage(
   state: EditorState,
   tokens: Token[],
   ignores: DocRange[],
-  hoverKey: string | null
+  hoverKey: string | null,
+  config: EditorConfig
 ): CoverageResult {
   const marks: Array<{ start: number; end: number; cls: string; style: string }> = []
   const breaks: Array<{ pos: number; style: string }> = []
@@ -126,19 +139,19 @@ function computeCoverage(
   }
   const merged = mergeIgnoreRanges(ignores)
   const IGNORED_BRK = ignoredBreakStyle()
-  const GRAY_BRK = breakStyleFor(GRAY)
+  const GRAY_BRK = breakStyleFor(GRAY, config)
 
-  if (settings.chunkMode === 'token') {
-    const visible = visibleTokenSet(tokens, settings.windowN, settings.windowM, merged)
+  if (config.chunkMode === 'token') {
+    const visible = visibleTokenSet(tokens, config.windowN, config.windowM, merged)
     for (const tk of tokens) {
       const hoverCls = hoverKey === `t${tk.tokenIndex}` ? ' hm-hover' : ''
       if (isIgnored(tk.start, tk.end, merged)) {
         addCovered(tk.start, tk.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (tk.stale || tk.ppl == null) {
-        addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
+        addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(GRAY, config), GRAY_BRK)
       } else if (visible.has(tk)) {
-        const hex = colorForPpl(tk.ppl, settings.stops)
-        addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
+        const hex = colorForPpl(tk.ppl, config.stops)
+        addCovered(tk.start, tk.end, 'hm' + hoverCls, heatStyle(hex, config), breakStyleFor(hex, config))
       }
       // Tokens filtered out by the layered window get no decoration (heat map hidden).
     }
@@ -150,21 +163,21 @@ function computeCoverage(
       .sort((a, b) => a[0] - b[0])
     let cur = 0
     for (const [s, e] of covered) {
-      if (s > cur) addCovered(cur, s, 'hm', heatStyle(GRAY), GRAY_BRK)
+      if (s > cur) addCovered(cur, s, 'hm', heatStyle(GRAY, config), GRAY_BRK)
       cur = Math.max(cur, e)
     }
-    if (cur < text.length) addCovered(cur, text.length, 'hm', heatStyle(GRAY), GRAY_BRK)
+    if (cur < text.length) addCovered(cur, text.length, 'hm', heatStyle(GRAY, config), GRAY_BRK)
   } else {
-    const chunks = buildChunks(text, tokens, settings.chunkMode, merged)
+    const chunks = buildChunks(text, tokens, config.chunkMode, merged)
     for (const c of chunks) {
       const hoverCls = hoverKey === `c${c.start}-${c.end}` ? ' hm-hover' : ''
       if (c.ignored) {
         addCovered(c.start, c.end, 'hm hm-ignored' + hoverCls, ignoredStyle(), IGNORED_BRK)
       } else if (!c.stat) {
-        addCovered(c.start, c.end, 'hm' + hoverCls, heatStyle(GRAY), GRAY_BRK)
+        addCovered(c.start, c.end, 'hm' + hoverCls, heatStyle(GRAY, config), GRAY_BRK)
       } else {
-        const hex = colorForPpl(c.stat.ppl, settings.stops)
-        addCovered(c.start, c.end, 'hm' + hoverCls, heatStyle(hex), breakStyleFor(hex))
+        const hex = colorForPpl(c.stat.ppl, config.stops)
+        addCovered(c.start, c.end, 'hm' + hoverCls, heatStyle(hex, config), breakStyleFor(hex, config))
       }
     }
   }
@@ -177,7 +190,7 @@ function redrawBreakOverlay(overlay: BreakOverlay): void {
   try {
     overlay.hoverAreas = []
     const field = view.state.field(hmField)
-    const { breaks } = computeCoverage(view.state, field.tokens, field.ignores, null)
+    const { breaks } = computeCoverage(view.state, field.tokens, field.ignores, null, field.config)
     const base = contentOrigin(view)
     const keep = new Set<string>()
     for (const b of breaks) {
@@ -274,8 +287,8 @@ class BreakOverlay {
 export const breakOverlayPlugin = ViewPlugin.fromClass(BreakOverlay)
 
 // ---------- Decoration construction ----------
-function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null }): DecorationSet {
-  const { marks } = computeCoverage(state, data.tokens, data.ignores, data.hoverKey)
+function buildDeco(state: EditorState, data: { tokens: Token[]; ignores: DocRange[]; hoverKey: string | null; config: EditorConfig }): DecorationSet {
+  const { marks } = computeCoverage(state, data.tokens, data.ignores, data.hoverKey, data.config)
 
   // Build marks: strictly increasing, non-overlapping ranges (RangeSet requirement).
   marks.sort((a, b) => a.start - b.start || a.end - b.end)
@@ -294,13 +307,14 @@ interface HMValue {
   tokens: Token[]
   ignores: DocRange[]
   hoverKey: string | null
+  config: EditorConfig
   deco: DecorationSet
 }
 
 export const hmField: StateField<HMValue> = StateField.define<HMValue>({
-  create: (): HMValue => ({ tokens: [], ignores: [], hoverKey: null, deco: Decoration.none }),
+  create: (): HMValue => ({ tokens: [], ignores: [], hoverKey: null, config: DEFAULT_EDITOR_CONFIG, deco: Decoration.none }),
   update(value, tr: Transaction): HMValue {
-    let { tokens, ignores, hoverKey } = value
+    let { tokens, ignores, hoverKey, config } = value
     let rebuild = false
     if (tr.docChanged) {
       tokens = mapTokensThroughChanges(tokens, tr.changes)
@@ -317,12 +331,15 @@ export const hmField: StateField<HMValue> = StateField.define<HMValue>({
       } else if (e.is(setHoverEffect)) {
         hoverKey = e.value.key
         rebuild = true
+      } else if (e.is(setConfigEffect)) {
+        config = e.value
+        rebuild = true
       } else if (e.is(refreshEffect)) {
         rebuild = true
       }
     }
-    const deco = rebuild ? buildDeco(tr.state, { tokens, ignores, hoverKey }) : value.deco
-    return { tokens, ignores, hoverKey, deco }
+    const deco = rebuild ? buildDeco(tr.state, { tokens, ignores, hoverKey, config }) : value.deco
+    return { tokens, ignores, hoverKey, config, deco }
   },
   provide: (f) => EditorView.decorations.from(f, (v) => v.deco)
 })
@@ -373,11 +390,11 @@ function statHtml(stat: StatResult | null): string {
 
 /** Statistics for the chunk at a document position under the current chunking mode. */
 function infoAtPos(state: EditorState, pos: number): { key: string; label: string; stat: StatResult | null } | null {
-  const { tokens, ignores } = state.field(hmField)
+  const { tokens, ignores, config } = state.field(hmField)
   const text = state.doc.toString()
   if (!text) return null
   const merged = mergeIgnoreRanges(ignores)
-  if (settings.chunkMode === 'token') {
+  if (config.chunkMode === 'token') {
     // Prefer a real (non-zero-width) token covering the position; only fall back
     // to a zero-width token pinned exactly at it. This stops hover from latching
     // onto degenerate tokens at chunk boundaries (e.g. line-end positions).
@@ -392,10 +409,10 @@ function infoAtPos(state: EditorState, pos: number): { key: string; label: strin
       : { nll: tk.nll, ppl: tk.ppl, count: 1 }
     return { key: `t${tk.tokenIndex}`, label: t('tooltip.tokenLabel', { index: tk.tokenIndex, text: tk.text, suffix }), stat }
   }
-  const chunks = buildChunks(text, tokens, settings.chunkMode, merged)
+  const chunks = buildChunks(text, tokens, config.chunkMode, merged)
   const c = chunks.find((ck) => ck.start <= pos && pos < ck.end)
   if (!c) return null
-  const name = settings.chunkMode === 'sentence' ? t('tooltip.sentence') : t('tooltip.paragraph')
+  const name = config.chunkMode === 'sentence' ? t('tooltip.sentence') : t('tooltip.paragraph')
   return {
     key: `c${c.start}-${c.end}`,
     label: name + (c.ignored ? t('tooltip.ignored') : ''),
@@ -566,7 +583,11 @@ export interface EditorApi {
   applyFonts: () => void
 }
 
-export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): EditorApi {
+export function createEditor(
+  parent: HTMLElement,
+  callbacks: EditorCallbacks,
+  getConfig: () => EditorConfig
+): EditorApi {
   const { onDocChanged, onSelectionChanged } = callbacks
 
   function handleSelectionTooltip(v: EditorView): void {
@@ -627,7 +648,10 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
   })
 
   const view = new EditorView({ state, parent })
-  applyFonts(view)
+  // Land the injected config so every build from here on uses the app's current
+  // settings, then apply the matching font.
+  view.dispatch({ effects: setConfigEffect.of(getConfig()) })
+  applyFonts(view, getConfig())
 
   const api: EditorApi = {
     view,
@@ -657,7 +681,8 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
     },
 
     refreshDecorations() {
-      view.dispatch({ effects: refreshEffect.of(null) })
+      // Carry the latest config with the refresh so a rebuild reads fresh values.
+      view.dispatch({ effects: [setConfigEffect.of(getConfig()), refreshEffect.of(null)] })
     },
 
     getTokens() {
@@ -685,14 +710,14 @@ export function createEditor(parent: HTMLElement, callbacks: EditorCallbacks): E
     },
 
     applyFonts() {
-      applyFonts(view)
+      applyFonts(view, getConfig())
     }
   }
   return api
 }
 
-export function applyFonts(view: EditorView): void {
-  view.contentDOM.style.fontSize = settings.fontSize + 'px'
-  view.contentDOM.style.fontFamily = settings.fontFamily
-  view.scrollDOM.style.fontFamily = settings.fontFamily
+export function applyFonts(view: EditorView, config: EditorConfig): void {
+  view.contentDOM.style.fontSize = config.fontSize + 'px'
+  view.contentDOM.style.fontFamily = config.fontFamily
+  view.scrollDOM.style.fontFamily = config.fontFamily
 }

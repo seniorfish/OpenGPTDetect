@@ -81,6 +81,22 @@ export interface Settings {
   windowWidth: number
 }
 
+/**
+ * Subset of `Settings` consumed by the raw editor layer. Injected into
+ * `createEditor` as a `getConfig: () => EditorConfig` accessor so the editor
+ * never depends on the app's reactive settings singleton.
+ */
+export interface EditorConfig {
+  chunkMode: ChunkMode
+  style: HeatStyle
+  opacity: number
+  stops: ColorStop[]
+  windowN: number
+  windowM: number
+  fontSize: number
+  fontFamily: string
+}
+
 export interface Preset {
   name: string
   stops: ColorStop[]

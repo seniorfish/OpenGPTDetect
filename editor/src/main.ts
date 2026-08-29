@@ -1,5 +1,7 @@
 // ---------- Entry: bootstrap the Vue app ----------
 import './style.css'
+// Apply the persisted theme before the first render so no theme flash occurs.
+import './theme.ts'
 import { createApp } from 'vue'
 import App from './App.vue'
 import { i18n, initI18nSideEffects } from './i18n.ts'

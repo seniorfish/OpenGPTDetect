@@ -25,6 +25,7 @@ interface AppState {
   charCount: number
   cursorLine: number
   cursorCol: number
+  hasSelection: boolean // whether the main selection is non-empty (drives Ignore affordance)
   avgNll: number | null
   avgPpl: number | null
   coverage: number | null
@@ -43,6 +44,7 @@ const state = reactive<AppState>({
   charCount: 0,
   cursorLine: 1,
   cursorCol: 1,
+  hasSelection: false,
   avgNll: null,
   avgPpl: null,
   coverage: null,
@@ -158,6 +160,9 @@ function updateCursor(): void {
   const line = doc.lineAt(head)
   state.cursorLine = line.number
   state.cursorCol = head - line.from + 1
+  // Track whether a non-empty selection exists so the Ignore command can show the
+  // right affordance (it stays runnable from the command palette, which warns).
+  state.hasSelection = !view.state.selection.main.empty
 }
 
 /** Recompute the document aggregate statistics shown in the status bar. */

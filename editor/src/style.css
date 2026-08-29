@@ -1,61 +1,269 @@
-/* ---------- Layout ---------- */
-* { box-sizing: border-box; }
-html, body, #app { height: 100%; margin: 0; }
-body {
-  font-family: 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
-  font-size: 13px;
-  color: #222;
-  background: #f5f6f8;
-}
-#app { display: flex; flex-direction: column; }
+/*
+ * Design-system stylesheet (Tailwind CSS v4, CSS-first).
+ * Single source of truth for the visual tokens (neutral base, light+dark via a
+ * `.dark` class on <html>). shadcn-vue components resolve their colors through
+ * the `@theme inline` mapping below; the CodeMirror heat-map layer and the PPL
+ * tooltips are themed with the same tokens so the whole app reads as one system.
+ */
+@import "tailwindcss";
 
-/* ---------- Toolbar ---------- */
-.toolbar {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  padding: 6px 10px;
-  background: #fff;
-  border-bottom: 1px solid #e2e4e8;
-}
-.toolbar button {
-  padding: 4px 10px;
-  border: 1px solid #d0d3d9;
-  border-radius: 5px;
-  background: #fff;
-  cursor: pointer;
-  font-size: 13px;
-}
-.toolbar button:hover { background: #f0f2f5; }
-.toolbar button:disabled { opacity: 0.55; cursor: default; }
-.toolbar button.primary {
-  background: #2563eb; border-color: #2563eb; color: #fff; font-weight: 600;
-}
-.toolbar button.primary:hover { background: #1d4ed8; }
-.toolbar button.danger, .modal button.danger { color: #c02626; }
-.toolbar select, .modal select, .modal input[type="text"], .modal input[type="number"] {
-  padding: 3px 6px;
-  border: 1px solid #d0d3d9;
-  border-radius: 5px;
-  font-size: 13px;
-}
-.toolbar .sep { width: 1px; height: 20px; background: #e2e4e8; margin: 0 4px; }
-.toolbar .chk { display: flex; align-items: center; gap: 4px; cursor: pointer; }
-.toolbar .lbl { display: flex; align-items: center; gap: 4px; color: #555; }
+/* `dark:` variants match any element inside an ancestor with class `dark`. */
+@custom-variant dark (&:is(.dark *));
 
-/* ---------- Editor area ---------- */
+/* ---------- Theme tokens (neutral base) ---------- */
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.625rem;
+  --success: oklch(0.627 0.17 149.214);
+  color-scheme: light;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.185 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.185 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --success: oklch(0.723 0.219 149.579);
+  color-scheme: dark;
+}
+
+/* ---------- Fonts ---------- */
+@theme {
+  --font-sans: 'Segoe UI', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, 'Courier New', ui-monospace, monospace;
+}
+
+/* ---------- Map tokens to Tailwind color/radius utilities ---------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-success: var(--success);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ---------- Base ---------- */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--ring) 28%, transparent);
+    color: var(--foreground);
+  }
+}
+
+/* ---------- tw-animate-css equivalent (components animate via data-[state=*]) ---------- */
+@keyframes enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), 1) rotate(var(--tw-enter-rotate, 0));
+  }
+}
+@keyframes exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), 1) rotate(var(--tw-exit-rotate, 0));
+  }
+}
+@utility animate-in {
+  animation-name: enter;
+  animation-duration: var(--tw-duration, 0.15s);
+  --tw-enter-opacity: initial;
+  --tw-enter-scale: initial;
+  --tw-enter-rotate: initial;
+  --tw-enter-translate-x: initial;
+  --tw-enter-translate-y: initial;
+}
+@utility animate-out {
+  animation-name: exit;
+  animation-duration: var(--tw-duration, 0.15s);
+  --tw-exit-opacity: initial;
+  --tw-exit-scale: initial;
+  --tw-exit-rotate: initial;
+  --tw-exit-translate-x: initial;
+  --tw-exit-translate-y: initial;
+}
+@utility fade-in-0 { --tw-enter-opacity: 0; }
+@utility fade-in-50 { --tw-enter-opacity: 0.5; }
+@utility fade-out-0 { --tw-exit-opacity: 0; }
+@utility zoom-in-95 { --tw-enter-scale: 0.95; }
+@utility zoom-in-90 { --tw-enter-scale: 0.9; }
+@utility zoom-out-95 { --tw-exit-scale: 0.95; }
+@utility zoom-out-90 { --tw-exit-scale: 0.9; }
+@utility slide-in-from-top-1 { --tw-enter-translate-y: -0.25rem; }
+@utility slide-in-from-top-2 { --tw-enter-translate-y: -0.5rem; }
+@utility slide-in-from-bottom-1 { --tw-enter-translate-y: 0.25rem; }
+@utility slide-in-from-bottom-2 { --tw-enter-translate-y: 0.5rem; }
+@utility slide-in-from-left-1 { --tw-enter-translate-x: -0.25rem; }
+@utility slide-in-from-left-2 { --tw-enter-translate-x: -0.5rem; }
+@utility slide-in-from-right-1 { --tw-enter-translate-x: 0.25rem; }
+@utility slide-in-from-right-2 { --tw-enter-translate-x: 0.5rem; }
+
+/* ---------- App layout skin ---------- */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.3rem;
+  height: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 0 var(--border);
+}
+
+/* ---------- CodeMirror theming (heat-map editor, theme-aware) ---------- */
 .editor-wrap {
   flex: 1;
   min-height: 0;
-  background: #fff;
-  margin: 8px 10px 0;
-  border: 1px solid #e2e4e8;
-  border-radius: 8px;
+  position: relative;
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  border: 1px solid var(--border);
   overflow: hidden;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent);
 }
-.editor-wrap .cm-editor { height: 100%; }
-.editor-wrap .cm-editor.cm-focused { outline: none; }
-.editor-wrap .cm-scroller { position: relative; line-height: 1.7; }
-/* Line-break overlay: purely visual, never intercepts pointer/caret events */
-.cm-break-layer { position: absolute; left: 0; top: 0; pointer-events: none; }
+.editor-wrap:focus-within {
+  border-color: var(--ring);
+}
+.editor-wrap .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--card-foreground);
+  font-size: 15px;
+  line-height: 1.7;
+}
+.editor-wrap .cm-editor.cm-focused {
+  outline: none;
+}
+.editor-wrap .cm-scroller {
+  position: relative;
+  font-family: inherit;
+}
+.editor-wrap .cm-content {
+  color: var(--card-foreground);
+  caret-color: var(--ring);
+  padding-top: 0.75rem;
+  padding-bottom: 2rem;
+}
+.editor-wrap .cm-line {
+  padding: 0 0.75rem 0 0.5rem;
+}
+.editor-wrap .cm-gutters {
+  background: color-mix(in oklab, var(--muted) 40%, var(--card));
+  color: var(--muted-foreground);
+  border-right: 1px solid var(--border);
+}
+.editor-wrap .cm-activeLineGutter {
+  background: color-mix(in oklab, var(--secondary) 70%, transparent);
+  color: var(--secondary-foreground);
+}
+.editor-wrap .cm-activeLine {
+  background: color-mix(in oklab, var(--secondary) 45%, transparent);
+}
+.editor-wrap .cm-cursor,
+.editor-wrap .cm-dropCursor {
+  border-left: 2px solid var(--ring);
+}
+.editor-wrap .cm-selectionBackground,
+.editor-wrap.cm-focused .cm-selectionBackground,
+.editor-wrap .cm-content ::selection {
+  background: color-mix(in oklab, var(--ring) 22%, transparent) !important;
+}
+
+/* Line-break ('¶') overlay: the glyph color is imposed inline by editor.ts; force
+   the theme's muted color so the glyph stays legible in both light and dark. */
+.cm-break-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
 .cm-break-layer .cm-br {
   position: absolute;
   width: 0.9em;
@@ -63,142 +271,95 @@ body {
   border-radius: 2px;
   font-size: 0.92em;
   user-select: none;
+  color: var(--muted-foreground) !important;
+  opacity: 0.85;
 }
 .cm-break-layer .cm-br.cm-br-hover {
-  outline: 1.5px solid rgba(30, 64, 175, 0.55);
-  filter: brightness(0.93);
+  outline: 1.5px solid var(--ring);
+  filter: brightness(1.05);
+  opacity: 1;
 }
 
 /* Heat-map chunks */
-.hm { border-radius: 3px; padding: 1px 0; cursor: text; transition: filter 0.08s; }
-.hm-hover { outline: 1.5px solid rgba(30, 64, 175, 0.55); filter: brightness(0.93); }
-.hm-ignored { font-style: italic; }
+.hm {
+  border-radius: 3px;
+  padding: 1px 0;
+  cursor: text;
+  transition: filter 0.08s;
+}
+.hm-hover {
+  outline: 1.5px solid var(--ring);
+  filter: brightness(1.06);
+}
+.hm-ignored {
+  font-style: italic;
+}
 
-/* ---------- Histogram panel ---------- */
-.histo-panel {
-  margin: 6px 10px 0;
-  padding: 4px 8px 2px;
-  background: #fff;
-  border: 1px solid #e2e4e8;
-  border-radius: 8px 8px 0 0;
-  border-bottom: none;
-}
-.histo-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.histo-title { font-weight: 600; color: #444; margin-right: 6px; }
-.histo-controls button {
-  padding: 2px 8px; font-size: 12px;
-  border: 1px solid #d0d3d9; border-radius: 4px; background: #fff; cursor: pointer;
-}
-.histo-controls button:hover { background: #f0f2f5; }
-.histo-controls select, .histo-controls input[type="number"] {
-  padding: 2px 4px; font-size: 12px; border: 1px solid #d0d3d9; border-radius: 4px;
-}
-.histo-controls input[type="number"] { width: 56px; }
-.window-label { color: #2563eb; font-weight: 600; margin-left: auto; }
-#histogram {
-  width: 100%; height: 84px; display: block; margin-top: 4px;
-  cursor: crosshair; touch-action: none;
-}
-.histo-axis { font-size: 10px; fill: #888; }
-.histo-empty { font-size: 12px; fill: #aaa; }
-.histo-brush { fill: rgba(37, 99, 235, 0.25); stroke: #2563eb; stroke-width: 1; }
-.histo-hint { font-size: 11px; color: #999; padding: 0 0 3px; }
-
-/* ---------- Status bar ---------- */
-.statusbar {
-  display: flex; align-items: center; gap: 2px;
-  padding: 3px 10px;
-  background: #fff;
-  border-top: 1px solid #e2e4e8;
-  color: #555;
-  font-size: 12px;
-}
-.statusbar .st { padding: 1px 8px; border-radius: 4px; white-space: nowrap; }
-.statusbar .st:hover { background: #f0f2f5; }
-.statusbar .st.clickable { cursor: pointer; color: #2563eb; }
-.statusbar .st.offline { color: #c02626; }
-
-/* ---------- Tooltips ---------- */
+/* ---------- PPL tooltip (imperative, appended to <body> by editor.ts) ---------- */
 .ppl-tooltip {
   position: fixed;
-  z-index: 1000;
+  z-index: 1200;
   max-width: 340px;
-  padding: 6px 10px;
-  background: rgba(30, 32, 36, 0.94);
-  color: #eee;
-  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   font-size: 12px;
   line-height: 1.5;
   pointer-events: none;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
 }
-.ppl-tooltip .tip-label { font-weight: 600; margin-bottom: 2px; word-break: break-all; }
-.ppl-tooltip .tip-dim { color: #9aa0a6; margin-left: 4px; }
-
-/* ---------- Modal ---------- */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 900;
-}
-.modal {
-  width: min(560px, 92vw);
-  max-height: 84vh;
-  overflow: auto;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-}
-.modal-head {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 14px;
-  border-bottom: 1px solid #eee;
+.ppl-tooltip .tip-label {
   font-weight: 600;
+  margin-bottom: 2px;
+  word-break: break-all;
 }
-.modal-close { border: none; background: none; font-size: 15px; cursor: pointer; color: #888; }
-.modal-body { padding: 12px 14px; }
-.form-row {
-  display: flex; align-items: center; gap: 10px;
-  margin-bottom: 10px;
+.ppl-tooltip .tip-dim {
+  color: var(--muted-foreground);
+  margin-left: 4px;
 }
-.form-row > label { width: 88px; flex-shrink: 0; color: #555; }
-.form-row input[type="text"] { flex: 1; }
-.form-row input[type="number"] { width: 90px; }
-.form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.form-actions button, .modal-body button {
-  padding: 4px 12px; border: 1px solid #d0d3d9; border-radius: 5px;
-  background: #fff; cursor: pointer; font-size: 13px;
-}
-.form-actions button.primary, .modal-body button.primary {
-  background: #2563eb; border-color: #2563eb; color: #fff;
-}
-.stops-editor { flex: 1; display: flex; flex-direction: column; gap: 6px; }
-.stop-row { display: flex; align-items: center; gap: 8px; }
-.stop-row input[type="number"] { width: 80px; }
-.stop-row input[type="color"] { width: 40px; height: 26px; padding: 0; border: 1px solid #ccc; }
-.preset-row, .ignore-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-.preset-row .preset-name { flex: 1; }
-.preset-row input[type="text"] { flex: 1; }
-.ignore-row .ignore-preview { flex: 1; word-break: break-all; }
-.tip-dim { color: #9aa0a6; }
 
-/* ---------- Toast ---------- */
-.toast {
-  position: fixed;
-  bottom: 46px; left: 50%;
-  transform: translateX(-50%);
-  z-index: 1100;
-  padding: 8px 16px;
-  border-radius: 6px;
-  background: rgba(30, 32, 36, 0.94);
-  color: #fff;
-  font-size: 13px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+/* ---------- Histogram (SVG, imperative) ---------- */
+.histo-area {
+  touch-action: none;
+  cursor: crosshair;
+  width: 100%;
+  height: 96px;
+  display: block;
 }
-.toast.warn { background: #b45309; }
-.toast.error { background: #b91c1c; }
+.histo-axis {
+  font-size: 10px;
+  fill: var(--muted-foreground);
+}
+.histo-empty {
+  font-size: 12px;
+  fill: var(--muted-foreground);
+}
+.histo-brush {
+  fill: color-mix(in oklab, var(--ring) 22%, transparent);
+  stroke: var(--ring);
+  stroke-width: 1;
+}
+.histo-dim {
+  fill: color-mix(in oklab, var(--foreground) 16%, transparent);
+}
+
+/* ---------- Scrollbars (subtle, theme-aware) ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

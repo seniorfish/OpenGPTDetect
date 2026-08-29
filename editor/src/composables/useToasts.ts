@@ -1,28 +1,14 @@
-// ---------- Toast queue (a single transient message) ----------
-import { reactive } from 'vue'
+// ---------- Toast bridge ----------
+// Preserves the app-wide `toast(msg, type)` contract while rendering through
+// vue-sonner (the shadcn-vue toast stack). The single <Sonner /> mount in App.vue
+// does the actual rendering; this module only forwards the call.
+import { toast as sonnerToast } from 'vue-sonner'
 
 export type ToastType = 'info' | 'warn' | 'error'
 
-const state = reactive({
-  msg: '',
-  type: 'info' as ToastType,
-  visible: false
-})
-
-let timer: ReturnType<typeof setTimeout> | undefined
-
-/** Display a toast for a few seconds (replacing any current one). */
+/** Display a toast. `warn` and `error` map to sonner's level semantics. */
 export function toast(msg: string, type: ToastType = 'info'): void {
-  state.msg = msg
-  state.type = type
-  state.visible = true
-  clearTimeout(timer)
-  timer = setTimeout(() => {
-    state.visible = false
-  }, 4500)
-}
-
-/** Reactive toast state, consumed by <ToastHost>. */
-export function useToastState(): { msg: string; type: ToastType; visible: boolean } {
-  return state
+  if (type === 'error') sonnerToast.error(msg)
+  else if (type === 'warn') sonnerToast.warning(msg)
+  else sonnerToast(msg)
 }

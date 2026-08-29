@@ -1,13 +1,24 @@
 <script setup lang="ts">
 // ---------- Histogram panel: PPL distribution + layered-window controls ----------
-// Keeps the imperative SVG renderer: window/draw state lives in shared reactive
-// settings, and a `drawTick` signal triggers redraws. Ported from the old ui.ts.
+// A bottom Card. Keeps the imperative SVG renderer (window/draw state lives in
+// shared reactive settings; a `drawTick` signal triggers redraws). The panel's
+// shift/top/all actions are also registered into the command registry so the
+// Ctrl+K palette and the header can drive them from one implementation.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronLeft, ChevronRight,
+  Maximize, MousePointer2
+} from '@lucide/vue'
 import { useI18n } from '../i18n.ts'
 import { settings, saveSettings } from '../composables/useSettings.ts'
 import { useApp } from '../composables/useApp.ts'
 import { mergeIgnoreRanges, isIgnored } from '../chunks.ts'
 import { clamp, colorForPpl } from '../util.ts'
+import { registerHistoActions } from '../commands.ts'
+import { Button } from '../components/ui/button'
+import { Badge } from '../components/ui/badge'
+import { Separator } from '../components/ui/separator'
+import { Tooltip, TooltipTrigger, TooltipContent } from '../components/ui/tooltip'
 
 const { t } = useI18n()
 const { state, getTokens, getIgnores, settingsChanged } = useApp()
@@ -22,7 +33,9 @@ let histoData: { arr: number[]; x: HistoScale | null } = { arr: [], x: null }
 const svgRef = ref<SVGSVGElement | null>(null)
 const winWInputRef = ref<HTMLInputElement | null>(null)
 const customWidthVisible = ref([5, 10, 20].includes(settings.windowWidth) ? false : true)
+const collapsed = ref(false)
 
+const tokenMode = computed(() => settings.chunkMode === 'token')
 const windowLabel = computed(() => t('histo.window', { n: settings.windowN, m: settings.windowM }))
 
 // ---------- Layered window ----------
@@ -89,7 +102,7 @@ function draw(): void {
   const svg = svgRef.value
   if (!svg) return
   const W = svg.clientWidth || 800
-  const H = svg.clientHeight || 80
+  const H = svg.clientHeight || 96
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
   svg.innerHTML = ''
 
@@ -152,8 +165,8 @@ function draw(): void {
   const pAt = (p: number): number => arr[clamp(Math.floor((p / 100) * arr.length), 0, arr.length - 1)]
   const x1 = x(pAt(settings.windowN))
   const x2 = settings.windowM >= 100 ? W - padR : x(pAt(settings.windowM))
-  svg.appendChild(mk('rect', { x: padL, y: padT, width: Math.max(0, x1 - padL), height: H - padT - padB, fill: 'rgba(60,60,60,0.35)' }))
-  svg.appendChild(mk('rect', { x: x2, y: padT, width: Math.max(0, W - padR - x2), height: H - padT - padB, fill: 'rgba(60,60,60,0.35)' }))
+  svg.appendChild(mk('rect', { x: padL, y: padT, width: Math.max(0, x1 - padL), height: H - padT - padB, class: 'histo-dim' }))
+  svg.appendChild(mk('rect', { x: x2, y: padT, width: Math.max(0, W - padR - x2), height: H - padT - padB, class: 'histo-dim' }))
 
   // Axis labels.
   const fmt = (v: number): string => (v >= 1000 ? v.toExponential(1) : Number(v.toFixed(1)).toString())
@@ -178,8 +191,6 @@ interface Brush {
 
 let brush: Brush | null = null
 
-// Shared gesture-end teardown: release pointer capture and drop the drag state
-// so a cancelled pointer never leaves a stale brush or a stuck selection rect.
 function endBrush(svg: SVGSVGElement, e: PointerEvent, resolve: boolean): void {
   if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId)
   const current = brush
@@ -223,12 +234,10 @@ function attachBrush(svg: SVGSVGElement): void {
     brush.selEl.setAttribute('x', String(x1))
     brush.selEl.setAttribute('y', '0')
     brush.selEl.setAttribute('width', String(w))
-    brush.selEl.setAttribute('height', String(svg.clientHeight || 80))
+    brush.selEl.setAttribute('height', String(svg.clientHeight || 96))
   })
 }
 
-// Pointer-up resolves the dragged range into a percentile window; pointer-cancel
-// only tears the drag state down and never commits a window.
 function attachBrushUp(svg: SVGSVGElement): void {
   svg.addEventListener('pointerup', (e) => {
     endBrush(svg, e, true)
@@ -250,6 +259,8 @@ onMounted(() => {
   window.addEventListener('resize', onResize)
   watch(() => state.drawTick, scheduleDraw, { flush: 'post' })
   scheduleDraw()
+  // Expose the window actions to the command registry.
+  registerHistoActions({ shiftDown, shiftUp, toTop, toAll })
 })
 
 onBeforeUnmount(() => {
@@ -258,31 +269,117 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="histo-panel" id="histo-panel">
-    <div class="histo-controls">
-      <span class="histo-title">{{ t('histo.title') }}</span>
-      <button id="btn-win-down" :title="t('histo.winDownHint')" @click="shiftDown">◀ {{ t('histo.winDown') }}</button>
-      <button id="btn-win-up" :title="t('histo.winUpHint')" @click="shiftUp">{{ t('histo.winUp') }} ▶</button>
-      <button id="btn-win-top" :title="t('histo.winTopHint')" @click="toTop">
-        {{ t('histo.winTop', { w: '' }) }}<span id="win-w-label">{{ settings.windowWidth }}</span>%
-      </button>
-      <button id="btn-win-all" :title="t('histo.winAllHint')" @click="toAll">{{ t('histo.winAll') }}</button>
-      <label class="lbl">{{ t('histo.width') }}
-        <select id="sel-win-w" @change="onWinWidthSelect">
-          <option value="5">5%</option>
-          <option value="10">10%</option>
-          <option value="20">20%</option>
-          <option value="custom">{{ t('histo.widthCustom') }}</option>
-        </select>
-      </label>
-      <input
-        id="inp-win-w" ref="winWInputRef" type="number" min="1" max="100" step="1"
-        :style="{ display: customWidthVisible ? '' : 'none' }"
-        :title="t('histo.widthCustomHint')" @change="onWinWidthCustomChange"
-      />
-      <span id="window-label" class="window-label">{{ windowLabel }}</span>
+  <section class="shrink-0 border-t bg-card">
+    <div class="px-4 pt-2 pb-2.5">
+      <!-- Header row: title + window status + control cluster -->
+      <div class="flex items-center gap-2">
+        <Tooltip :delay-duration="150">
+          <TooltipTrigger as-child>
+            <button
+              class="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              @click="collapsed = !collapsed"
+            >
+              <ChevronDown class="size-3.5 transition-transform duration-150" :class="{ '-rotate-90': collapsed }" />
+              {{ t('histo.title') }}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top">{{ t('histo.collapseHint') }}</TooltipContent>
+        </Tooltip>
+
+        <Badge
+          v-if="!collapsed && tokenMode"
+          id="window-label"
+          variant="secondary"
+          class="h-4.5 px-1.5 font-mono text-[10px] font-medium tabular-nums"
+        >
+          {{ windowLabel }}
+        </Badge>
+        <span v-else-if="!collapsed" class="text-[11px] text-muted-foreground">{{ t('histo.tokenOnly') }}</span>
+
+        <div class="flex-1" />
+
+        <template v-if="!collapsed">
+          <!-- Window control cluster -->
+          <div class="flex items-center gap-1">
+            <span class="hidden text-[11px] text-muted-foreground md:inline">{{ t('histo.width') }}</span>
+            <Tooltip :delay-duration="150">
+              <TooltipTrigger as-child>
+                <select
+                  id="sel-win-w"
+                  :disabled="!tokenMode"
+                  class="h-7 rounded-md border bg-transparent px-1.5 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                  @change="onWinWidthSelect"
+                >
+                  <option value="5">5%</option>
+                  <option value="10">10%</option>
+                  <option value="20">20%</option>
+                  <option value="custom">{{ t('histo.widthCustom') }}</option>
+                </select>
+              </TooltipTrigger>
+              <TooltipContent side="top">{{ t('histo.widthHint') }}</TooltipContent>
+            </Tooltip>
+            <input
+              id="inp-win-w"
+              ref="winWInputRef"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+              :disabled="!tokenMode"
+              :style="{ display: customWidthVisible ? '' : 'none' }"
+              :title="t('histo.widthCustomHint')"
+              class="h-7 w-14 rounded-md border bg-transparent px-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              @change="onWinWidthCustomChange"
+            />
+          </div>
+
+          <Separator orientation="vertical" class="mx-1 h-5" />
+
+          <div class="flex items-center gap-0.5">
+            <Tooltip :delay-duration="150">
+              <TooltipTrigger as-child>
+                <Button id="btn-win-down" variant="ghost" size="icon-sm" :disabled="!tokenMode" @click="shiftDown">
+                  <ChevronLeft class="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">{{ t('histo.winDownHint') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip :delay-duration="150">
+              <TooltipTrigger as-child>
+                <Button id="btn-win-up" variant="ghost" size="icon-sm" :disabled="!tokenMode" @click="shiftUp">
+                  <ChevronRight class="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">{{ t('histo.winUpHint') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip :delay-duration="150">
+              <TooltipTrigger as-child>
+                <Button id="btn-win-top" variant="ghost" size="icon-sm" :title="t('histo.winTopHint')" :disabled="!tokenMode" @click="toTop">
+                  <ArrowUpToLine class="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">{{ t('histo.winTopHint') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip :delay-duration="150">
+              <TooltipTrigger as-child>
+                <Button id="btn-win-all" variant="ghost" size="icon-sm" :disabled="!tokenMode" @click="toAll">
+                  <Maximize class="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">{{ t('histo.winAllHint') }}</TooltipContent>
+            </Tooltip>
+          </div>
+        </template>
+      </div>
+
+      <!-- Histogram -->
+      <template v-if="!collapsed">
+        <svg id="histogram" ref="svgRef" class="histo-area mt-2" preserveAspectRatio="none"></svg>
+        <p class="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+          <MousePointer2 class="size-3" />
+          {{ t('histo.hint') }}
+        </p>
+      </template>
     </div>
-    <svg id="histogram" ref="svgRef" preserveAspectRatio="none"></svg>
-    <div class="histo-hint">{{ t('histo.hint') }}</div>
-  </div>
+  </section>
 </template>

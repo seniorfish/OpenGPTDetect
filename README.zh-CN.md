@@ -10,7 +10,7 @@
 
 | 组件 | 位置 | 说明 |
 |---|---|---|
-| **PPL 分析服务**（后端） | `server/llama.py` | FastAPI + llama.cpp，逐 token NLL / PPL，缓存友好的两步式接口 |
+| **PPL 分析服务**（后端） | `server/api.py` + `server/backends/` | FastAPI + llama.cpp，逐 token NLL / PPL，缓存友好的两步式接口，可切换后端 |
 | **API 协议** | `docs/api.md` | 服务端接口定义、数据模型、字段语义 |
 | **页面编辑器** | `editor/` | Vite + CodeMirror 6 的困惑度文本编辑器，构建为单个 HTML |
 | **Chrome 插件** | `extension/` | MV3 插件，在网页上以热力图 + 标注显示文本困惑度 |
@@ -19,7 +19,7 @@
 
 ```
 浏览器页面 (editor/)  ─┐
-Chrome 插件 (extension/) ├─ HTTP/JSON ─► server/llama.py ─► llama.cpp ─► GGUF 模型（本地）
+Chrome 插件 (extension/) ├─ HTTP/JSON ─► server/api.py ─► (后端) ─► llama.cpp ─► GGUF 模型（本地）
 curl / 脚本            ─┘                    （FastAPI，全局串行锁）
 ```
 
@@ -37,7 +37,7 @@ curl / 脚本            ─┘                    （FastAPI，全局串行锁�
 cd server
 pip install -r requirements.txt
 cp .env.example .env        # 然后把 .env 里的 MODEL_PATH 改为你的模型路径
-python llama.py
+python api.py
 ```
 
 模型加载完成后访问 `http://127.0.0.1:8000/docs`（Swagger）或用 `curl` 验证：
@@ -74,7 +74,7 @@ curl -X POST "http://127.0.0.1:8000/ppl" \
 ## 项目结构
 
 ```
-├─ server/          # FastAPI + llama.cpp 服务（llama.py、requirements、.env.example）
+├─ server/          # FastAPI 服务 + 可插拔后端（api.py、backends/、requirements、.env.example）
 ├─ docs/api.md      # API 协议（契约基线：路由、字段、错误码、FAQ）
 ├─ editor/          # Vite + CodeMirror 前端
 ├─ extension/       # Chrome MV3 插件

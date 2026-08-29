@@ -7,7 +7,10 @@
 | POST | `/ppl` | text → tokens → PPL | yes |
 | POST | `/tokenize` | text → token sequence | no |
 | POST | `/ppl_from_tokens` | token sequence → PPL | yes |
+| POST | `/ppl_from_tokens/stream` | token sequence → per-token nll/ppl (SSE) | yes |
 | GET | `/health` | health check / config | no |
+| GET | `/backends` | list available backends + current state | no |
+| POST | `/backends/{id}/load` / `/backends/{id}/unload` | load or unload a backend (switch) | on load |
 
 The two-step flow is exactly equivalent to `/ppl`:
 
@@ -212,6 +215,8 @@ Read from environment variables or a `server/.env` file (`python-dotenv`); all o
 | `FLASH_ATTN` | `False` | Enable Flash Attention |
 | `NLL_CHUNK` | `128` | numpy NLL rows per chunk |
 | `PPL_USE_TORCH` | `1` | `1` = PyTorch NLL (auto-picks cuda/xpu/cpu), `0` = numpy |
+| `BACKEND` | `llamacpp` | Backend id: `llamacpp` (needs `MODEL_PATH`) or `mock` (deterministic, no model) |
+| `SLIDING_WINDOW` | `0` | Future API-layer sliding-window switch for inputs past a backend's limit (reserved, unused) |
 | `PORT` | `8000` | uvicorn listen port |
 
-Run with `python llama.py` (reads `server/.env`); the service is ready once the log shows `Model loaded, service ready`.
+Run with `python api.py` (reads `server/.env`); the service is ready once the log shows `Backend '...' loaded, service ready`.

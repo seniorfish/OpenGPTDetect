@@ -6,3 +6,6 @@ llama-cpp-python>=0.2.70
 python-dotenv>=1.0
 # Optional: enable the fast PyTorch NLL backend (torch/cuda, torch/xpu or torch/cpu).
 # Install it yourself; the service falls back to numpy when torch is missing.
+#
+# Dev/test dependencies (API contract tests in server/tests/): install manually.
+#   pip install pytest httpx

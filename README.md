@@ -10,7 +10,7 @@ Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machi
 
 | Component | Location | Description |
 |---|---|---|
-| **PPL analysis service** (backend) | `server/llama.py` | FastAPI + llama.cpp, per-token NLL / PPL, cache-friendly two-step API |
+| **PPL analysis service** (backend) | `server/api.py` + `server/backends/` | FastAPI + llama.cpp, per-token NLL / PPL, cache-friendly two-step API, switchable backends |
 | **API contract** | `docs/api.md` | Server interface definitions, data models, field semantics |
 | **Web editor** | `editor/` | CodeMirror 6 perplexity text editor built with Vite, bundled into a single HTML file |
 | **Chrome extension** | `extension/` | MV3 extension that shows page-text perplexity as heatmaps + annotations |
@@ -19,7 +19,7 @@ Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machi
 
 ```
 Web editor (editor/)     ─┐
-Chrome extension  (extension/) ├─ HTTP/JSON ─► server/llama.py ─► llama.cpp ─► local GGUF model
+Chrome extension  (extension/) ├─ HTTP/JSON ─► server/api.py ─► (backend) ─► llama.cpp ─► local GGUF model
 curl / scripts           ─┘                (FastAPI, global serialization lock)
 ```
 
@@ -37,7 +37,7 @@ Download any GGUF-format causal language model, e.g. a quantized Qwen or Llama G
 cd server
 pip install -r requirements.txt
 cp .env.example .env        # then set MODEL_PATH in .env to point at your model
-python llama.py
+python api.py
 ```
 
 Once the model is loaded, open `http://127.0.0.1:8000/docs` (Swagger) or verify with curl:
@@ -74,7 +74,7 @@ The service has two layers; hardware needs are decided by the llama.cpp build an
 ## Project layout
 
 ```
-├─ server/          # FastAPI + llama.cpp service (llama.py, requirements, .env.example)
+├─ server/          # FastAPI service + pluggable backends (api.py, backends/, requirements, .env.example)
 ├─ docs/api.md      # API contract (routes, fields, error codes, FAQ)
 ├─ editor/          # Vite + CodeMirror frontend
 ├─ extension/       # Chrome MV3 extension

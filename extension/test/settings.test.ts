@@ -35,12 +35,13 @@ describe('settings persistence', () => {
     expect((await getSettings()).apiBaseUrl).toBe('http://x')
   })
 
-  it('migrates v1 settings to v2 (scaleOverrides added)', async () => {
+  it('migrates v1 settings to v3 (scaleOverrides and locale added)', async () => {
     await browser.storage.local.set({
-      'local:settings': { ...DEFAULT_SETTINGS, scaleOverrides: undefined },
+      'local:settings': { ...DEFAULT_SETTINGS, scaleOverrides: undefined, locale: undefined },
     })
     const s = await getSettings()
     expect(s.scaleOverrides).toBeNull()
+    expect(s.locale).toBe('auto')
   })
 
   it('rejects invalid scaleOverrides on read', async () => {

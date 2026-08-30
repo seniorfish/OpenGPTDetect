@@ -1,4 +1,1 @@
-@import "tailwindcss";
-
-/* Shared primitives (packages/ui) live outside the auto-detected roots. */
-@source "../../../../packages/ui/src";
+@import "../../assets/tokens.css";

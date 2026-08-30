@@ -15,6 +15,8 @@ import {
 export const ExtensionSettingsSchema = z.object({
   enabled: z.boolean(),
   shortcutEnabled: z.boolean(),
+  /** UI language: 'auto' = detect from the browser/system language. */
+  locale: z.enum(['auto', 'zh', 'en']),
 
   apiBaseUrl: z.string(),
 
@@ -76,6 +78,7 @@ export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
   shortcutEnabled: true,
+  locale: 'auto',
 
   apiBaseUrl: 'http://127.0.0.1:8000',
 
@@ -120,10 +123,12 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 
 export const settingsItem = storage.defineItem<ExtensionSettings>('local:settings', {
   fallback: DEFAULT_SETTINGS,
-  version: 2,
+  version: 3,
   migrations: {
     // v1 -> v2: add the profile color-stack override (none stored before S7).
     2: (old) => ({ ...old, scaleOverrides: null }),
+    // v2 -> v3: add the UI language setting (defaults to browser detection).
+    3: (old) => ({ ...old, locale: 'auto' }),
   },
 })
 

@@ -1,7 +1,10 @@
 // ---------- Inline-styled annotations (zero CSS injection) ----------
 // Everything the annotation layer paints is inline style; the class names below
 // are MARKERS ONLY (never styled by any CSS) so removal is a single query.
+// Textual bits go through t() so a locale switch can be applied in place via
+// refreshAnnotationTexts().
 import type { ExtensionSettings } from './settings.ts'
+import { t, getLocale } from './i18n.ts'
 
 export const LABEL_CLASS = 'ppl-label'
 export const AI_TAG_CLASS = 'ppl-ai-tag'
@@ -13,6 +16,30 @@ const LABEL_COLOR = '#6b7280'
 
 /** Original inline values of an element before we touched its left border. */
 const aiBorderPrev = new WeakMap<HTMLElement, { borderLeft: string; paddingLeft: string }>()
+
+function labelTitle(avgPpl: number, lang: string): string {
+  return t('annotate.labelTitle', {
+    ppl: avgPpl.toFixed(2),
+    lang: lang === 'en' ? t('annotate.langEn') : t('annotate.langZh'),
+  })
+}
+
+/**
+ * Re-write the locale-dependent text of already-painted annotations (labels'
+ * tooltips and error tags) after a language switch.
+ */
+export function refreshAnnotationTexts(): void {
+  document.documentElement.lang = getLocale()
+  for (const el of document.querySelectorAll<HTMLElement>('.' + LABEL_CLASS)) {
+    const ppl = el.dataset.pplValue
+    if (ppl == null) continue
+    el.title = labelTitle(Number(ppl), el.dataset.lang ?? 'zh')
+  }
+  for (const el of document.querySelectorAll<HTMLElement>('.' + ERROR_CLASS)) {
+    el.textContent = t('annotate.errorTag')
+    el.title = t('annotate.errorTitle')
+  }
+}
 
 function removeByClass(el: Element, cls: string): void {
   for (const n of el.querySelectorAll('.' + cls)) n.remove()
@@ -31,7 +58,7 @@ export function setAI(blockEl: HTMLElement, settings: ExtensionSettings): void {
   if (!aiBorderPrev.has(blockEl)) {
     aiBorderPrev.set(blockEl, {
       borderLeft: blockEl.style.borderLeft,
-      paddingLeft: blockEl.style.paddingLeft
+      paddingLeft: blockEl.style.paddingLeft,
     })
   }
   blockEl.style.borderLeft = `3px solid ${settings.aiBorderColor}`
@@ -54,14 +81,22 @@ export function hasAI(blockEl: HTMLElement): boolean {
 }
 
 /** Small "ppl 12.3" superscript label at the end of a block. */
-export function addLabel(blockEl: HTMLElement, avgPpl: number, lang: string, settings: ExtensionSettings): void {
+export function addLabel(
+  blockEl: HTMLElement,
+  avgPpl: number,
+  lang: string,
+  settings: ExtensionSettings,
+): void {
   if (!settings.showPplLabel) return
   if (!Number.isFinite(avgPpl)) return
   removeByClass(blockEl, LABEL_CLASS)
   const span = document.createElement('span')
   span.className = LABEL_CLASS
   span.textContent = `ppl ${avgPpl.toFixed(1)}`
-  span.title = `平均困惑度 ${avgPpl.toFixed(2)}(${lang === 'en' ? '英文' : '中文'}段)`
+  // Dataset lets refreshAnnotationTexts() re-write the title after a locale change.
+  span.dataset.pplValue = avgPpl.toFixed(2)
+  span.dataset.lang = lang
+  span.title = labelTitle(avgPpl, lang)
   span.style.display = 'inline-block'
   span.style.fontSize = '0.72em'
   span.style.lineHeight = '1'
@@ -126,8 +161,8 @@ export function addError(blockEl: HTMLElement): void {
   removeByClass(blockEl, ERROR_CLASS)
   const span = document.createElement('span')
   span.className = ERROR_CLASS
-  span.textContent = 'ppl测量失败'
-  span.title = '本地模型服务返回错误或超时'
+  span.textContent = t('annotate.errorTag')
+  span.title = t('annotate.errorTitle')
   span.style.display = 'inline-block'
   span.style.fontSize = '0.68em'
   span.style.color = '#dc2626'

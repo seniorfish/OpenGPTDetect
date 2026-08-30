@@ -22,6 +22,7 @@ import {
   type ColorStop,
 } from '@opengptdetect/core'
 import { getSettings, settingsItem, type ExtensionSettings } from '../lib/settings.ts'
+import { initLocale } from '../lib/i18n.ts'
 import { send } from '../lib/messaging.ts'
 import {
   scan,
@@ -395,14 +396,21 @@ export default defineContentScript({
     // ----- wiring -----
     void (async () => {
       settings = await getSettings()
+      initLocale(settings.locale)
       floating = await mountFloatingUi(ctx).catch((err) => {
         // The annotation pipeline must survive a floating-UI failure.
         console.warn('[ppl] floating UI mount failed', err)
         return null
       })
       unwatch = settingsItem.watch((s) => {
-        settings = s ?? settings
-        if (settings) applyEnabled(settings.enabled)
+        if (!s) return
+        const prev = settings
+        settings = s
+        if (s.locale !== prev?.locale) {
+          initLocale(s.locale)
+          annotate.refreshAnnotationTexts()
+        }
+        applyEnabled(settings.enabled)
       })
       if (!isAllowed()) return
       applyEnabled(settings.enabled)

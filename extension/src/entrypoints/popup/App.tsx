@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { getSettings, setSettingsPatch } from '@/lib/settings.ts'
 import { send } from '@/lib/messaging.ts'
+import { initLocale, t, useLocale } from '@/lib/i18n.ts'
+import { Button, Switch } from '@opengptdetect/ui'
 
 type HealthState =
   | { status: 'checking' }
@@ -10,6 +12,7 @@ type HealthState =
 export default function App() {
   const [enabled, setEnabled] = useState(true)
   const [health, setHealth] = useState<HealthState>({ status: 'checking' })
+  void useLocale() // re-render when the locale changes while the popup stays open
 
   useEffect(() => {
     let alive = true
@@ -17,12 +20,16 @@ export default function App() {
       const s = await getSettings()
       if (!alive) return
       setEnabled(s.enabled)
+      initLocale(s.locale)
       const r = await send('health', { baseUrl: s.apiBaseUrl })
       if (!alive) return
       setHealth(
         r.ok && r.data
           ? { status: 'online', model: r.data.model }
-          : { status: 'offline', detail: r.ok ? 'offline' : String((r as { status?: number }).status ?? '') }
+          : {
+              status: 'offline',
+              detail: r.ok ? 'offline' : String((r as { status?: number }).status ?? ''),
+            },
       )
     })()
     return () => {
@@ -50,9 +57,9 @@ export default function App() {
   }
 
   return (
-    <div className="w-64 p-4 text-sm">
+    <div className="w-72 p-4 font-sans text-sm text-foreground">
       <header className="mb-3 flex items-center gap-2">
-        <h1 className="font-semibold">PPL 热力图</h1>
+        <h1 className="font-semibold">{t('app.name')}</h1>
         <span
           className={
             'ml-auto size-2 rounded-full ' +
@@ -62,37 +69,33 @@ export default function App() {
                 ? 'bg-red-500'
                 : 'bg-amber-400')
           }
+          aria-hidden
         />
       </header>
 
-      <div className="mb-3 text-xs text-muted-foreground">
-        {health.status === 'checking' && '检测服务中…'}
-        {health.status === 'online' && `本地服务在线 · ${health.model}`}
-        {health.status === 'offline' && `服务离线(${health.detail})`}
+      <div className="mb-3 min-h-4 text-xs text-muted-foreground">
+        {health.status === 'checking' && t('popup.checking')}
+        {health.status === 'online' && t('popup.online', { model: health.model })}
+        {health.status === 'offline' && t('popup.offline', { detail: health.detail })}
       </div>
 
-      <label className="mb-3 flex cursor-pointer items-center gap-2">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => void toggle(e.target.checked)}
-        />
-        <span>启用扩展(当前页)</span>
-      </label>
+      <div className="mb-3 flex items-center justify-between rounded-md border px-3 py-2">
+        <span>{t('popup.enable')}</span>
+        <Switch checked={enabled} onCheckedChange={(on) => void toggle(on)} />
+      </div>
 
       <div className="flex gap-2">
-        <button
-          className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
-          onClick={() => void remeasure()}
-        >
-          重新测量此页
-        </button>
-        <button
-          className="rounded-md border px-3 py-1.5 text-xs hover:bg-muted"
+        <Button size="sm" variant="outline" className="flex-1" onClick={() => void remeasure()}>
+          {t('popup.remeasure')}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="flex-1"
           onClick={() => browser.runtime.openOptionsPage()}
         >
-          打开设置
-        </button>
+          {t('popup.openOptions')}
+        </Button>
       </div>
     </div>
   )

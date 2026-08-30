@@ -6,6 +6,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { RefreshCwIcon, XIcon } from 'lucide-react'
 import { Badge, Button, Popover, PopoverAnchor, PopoverContent } from '@opengptdetect/ui'
+import { t, useLocale } from '../lib/i18n.ts'
 
 export type AiVerdict = 'ai' | 'human' | 'uncertain' | 'unknown'
 
@@ -49,16 +50,22 @@ export function subscribeDetail(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-const VERDICT_TEXT: Record<AiVerdict, string> = {
-  ai: '疑似 AI',
-  human: '疑似人类',
-  uncertain: '不确定',
-  unknown: '无判定',
+function verdictText(verdict: AiVerdict): string {
+  switch (verdict) {
+    case 'ai':
+      return t('floating.verdictAi')
+    case 'human':
+      return t('floating.verdictHuman')
+    case 'uncertain':
+      return t('floating.verdictUncertain')
+    default:
+      return t('floating.verdictNone')
+  }
 }
 
 function VerdictBadge({ verdict }: { verdict: AiVerdict }) {
   const variant = verdict === 'ai' ? 'destructive' : verdict === 'human' ? 'default' : 'outline'
-  return <Badge variant={variant}>{VERDICT_TEXT[verdict]}</Badge>
+  return <Badge variant={variant}>{verdictText(verdict)}</Badge>
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -79,6 +86,7 @@ export function BlockDetailPopover({
   onDismiss: () => void
 }) {
   const detail = useSyncExternalStore(subscribeDetail, getDetail)
+  void useLocale() // re-render all strings when the UI language changes
 
   // The anchor rect is fixed-positioned; any scroll invalidates it -> close.
   useEffect(() => {
@@ -126,26 +134,33 @@ export function BlockDetailPopover({
           className="space-y-3 rounded-md p-4 font-sans text-sm text-foreground"
         >
           <div className="flex items-center justify-between">
-            <span className="font-semibold">PPL 测量详情</span>
-            <Button variant="ghost" size="icon-xs" onClick={onDismiss} aria-label="关闭详情">
+            <span className="font-semibold">{t('floating.title')}</span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={onDismiss}
+              aria-label={t('floating.close')}
+            >
               <XIcon />
             </Button>
           </div>
 
           {detail.error ? (
-            <div className="text-xs text-destructive">测量失败:{detail.error}</div>
+            <div className="text-xs text-destructive">
+              {t('floating.fail', { error: detail.error })}
+            </div>
           ) : (
             <div className="space-y-1.5">
               <DetailRow
-                label="平均困惑度"
+                label={t('floating.avgPpl')}
                 value={detail.avgPpl == null ? '-' : detail.avgPpl.toFixed(2)}
               />
               <DetailRow
-                label="平均 NLL"
+                label={t('floating.avgNll')}
                 value={detail.avgNll == null ? '-' : detail.avgNll.toFixed(3)}
               />
-              <DetailRow label="字符数" value={String(detail.charCount)} />
-              <DetailRow label="Token 数" value={String(detail.tokenCount)} />
+              <DetailRow label={t('floating.charCount')} value={String(detail.charCount)} />
+              <DetailRow label={t('floating.tokenCount')} value={String(detail.tokenCount)} />
             </div>
           )}
 
@@ -164,7 +179,7 @@ export function BlockDetailPopover({
               onClick={detail.onRemeasure}
             >
               <RefreshCwIcon />
-              重新测量
+              {t('floating.remeasure')}
             </Button>
           )}
         </div>

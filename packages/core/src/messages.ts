@@ -13,15 +13,6 @@ export interface MessageMap {
     req: { baseUrl: string }
     res: { ok: true; data: HealthResponse } | { ok: false; status?: number; error?: string }
   }
-  'settings:get': {
-    req: Record<string, never>
-    // Data shape is app-defined; the receiving layer parses it via its own schema.
-    res: { ok: true; data: unknown } | { ok: false; error: string }
-  }
-  'settings:set': {
-    req: { patch: Record<string, unknown> }
-    res: { ok: true } | { ok: false; error: string }
-  }
   'enabled-toggled': {
     req: { enabled: boolean }
     res: Record<string, never>

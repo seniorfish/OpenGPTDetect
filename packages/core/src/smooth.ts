@@ -36,7 +36,7 @@ export function smoothTokens(
     let curStart = 0
     const groups: [number, number][] = []
     for (let i = 0; i < tokens.length; i++) {
-      const txt = tokens[i].text || ''
+      const txt = tokens[i]!.text || ''
       if (SENT_END.test(txt)) {
         groups.push([curStart, i])
         curStart = i + 1

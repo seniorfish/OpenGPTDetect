@@ -9,7 +9,7 @@ import type { ColorStop } from './scale.ts'
 export function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
   if (!m) return [128, 128, 128]
-  const n = parseInt(m[1], 16)
+  const n = parseInt(m[1]!, 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
@@ -26,12 +26,12 @@ export function rgbToHex([r, g, b]: [number, number, number]): string {
 export function colorForPpl(ppl: number, stops: ColorStop[]): string {
   if (!stops.length) return '#999999'
   const sorted = [...stops].sort((a, b) => a.ppl - b.ppl)
-  if (ppl <= sorted[0].ppl) return sorted[0].color
-  const last = sorted[sorted.length - 1]
+  if (ppl <= sorted[0]!.ppl) return sorted[0]!.color
+  const last = sorted[sorted.length - 1]!
   if (ppl >= last.ppl) return last.color
   for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i]
-    const b = sorted[i + 1]
+    const a = sorted[i]!
+    const b = sorted[i + 1]!
     if (ppl >= a.ppl && ppl <= b.ppl) {
       const tm = b.ppl === a.ppl ? 0 : (ppl - a.ppl) / (b.ppl - a.ppl)
       const ca = hexToRgb(a.color)

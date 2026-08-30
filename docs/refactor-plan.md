@@ -128,7 +128,7 @@ src/entrypoints/
 | **S3 packages/ui + editor 切换** ✅ | 原语迁移;ColorStopsEditor 受控化;style.css 加 `@source` | 🟡(@source 为实测点) | editor 全绿 + design-screenshot 视觉回归 | **tailwindcss/02** 必读 |
 | **S4 WXT 骨架** ✅ | 手工搭 entrypoints(不跑 `wxt init`);wxt.config(module-react + tailwindcss);popup/options 最小页;root workspaces 补 `extension` | 🟡(web-ext 自动开浏览器/Windows) | `wxt build` 产出 `.output/chrome-mv3` | **WXT reference.md/react.md/config.md 精读** |
 | **S5 纯函数落 content** | dom-scan 拆分;测量管线用 core(state+errors+messages);background 消息翻新 | 🟡(DOM 行为保持敏感) | WxtVitest 行为测试绿;mock server 手动验证 | **WXT extension-apis.md 必读** |
-| **S6 浮层 UI** | createShadowRootUi + cssInjectionMode ui + `font-size:16px` + Radix portal 指回 shadow root | 🟡(Radix 文档就绪后升 🟢) | 多站点(不同 root font-size)实测:无缩放、弹窗样式完整 | **D:\references\Radix\reference.md(用户后台制作中,S6 前必读)**;WXT react.md CSS notes 复查 |
+| **S6 浮层 UI** | createShadowRootUi + cssInjectionMode ui + `font-size:16px` + Radix portal 指回 shadow root | 🟡(Radix 文档就绪后升 🟢) | 多站点(不同 root font-size)实测:无缩放、弹窗样式完整 | **D:\references\Radix\reference.md(已到位,S6 必读;02-overlays.md 覆盖 portal container)**;WXT react.md CSS notes 复查 |
 | **S7 profile 落地** | core/scale.ts 终版 + `z.toJSONSchema` 产出;editor 导入导出;extension options+profile 库(storage migrations) | 🟡 | 双端导入→渲染一致;python jsonschema 验同文件 | zod/04 复查;WXT extension-apis.md(storage)复查 |
 | **S8 对拍与文档** | `test-fixtures/` 终版;tools/measure/verify_scales.py;`docs/ppl-scale-format.md`;更新 AGENTS/README | 🟢 | python 脚本过;S1 夹具与 python 输出全同 | 无 |
 | **S9(可后置) CI** | GitHub Actions:三包 typecheck+test+build + verify_scales;extension puppeteer e2e | 🟢 | 远端跑绿 | 无 |

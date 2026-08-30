@@ -35,14 +35,14 @@ export function splitChunks(text: string, maxChars: number, lang: Lang): { text:
   while (pos < text.length) {
     // Farthest sentence boundary e with e - pos <= maxChars.
     let e = -1
-    while (bi < bounds.length && bounds[bi] - pos <= maxChars) {
-      e = bounds[bi]
+    while (bi < bounds.length && bounds[bi]! - pos <= maxChars) {
+      e = bounds[bi]!
       bi++
     }
     if (e <= pos) {
       // A single sentence is longer than maxChars: hard-cut.
       e = pos + maxChars
-      while (bi > 0 && bounds[bi - 1] > e) bi--
+      while (bi > 0 && bounds[bi - 1]! > e) bi--
     }
     out.push({ text: text.slice(pos, e), start: pos })
     pos = e

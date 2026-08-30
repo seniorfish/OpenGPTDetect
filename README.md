@@ -44,9 +44,26 @@ curl -X POST "http://127.0.0.1:8000/ppl" \
 ### 3. Use the editor / extension
 
 - **Web editor:** `cd editor && npm install && npm run dev`, then open the URL Vite prints; the production build is a single HTML file at `editor/dist/index.html` (`npm run build`).
-- **Chrome extension:** `chrome://extensions` → enable "Developer mode" → "Load unpacked" → select the `extension/` directory. It scans the current page and talks to the local service.
+- **Chrome extension:** `cd extension && npm install && npm run build`, then `chrome://extensions` → enable "Developer mode" → "Load unpacked" → select the `extension/.output/chrome-mv3` directory. It scans the current page and talks to the local service.
 
 > Both default to `http://127.0.0.1:8000` — start the service first.
+
+## PPL scale profiles
+
+The editor and the extension share one configuration format — a **profile** file
+(`schemaVersion 1`) that carries the ppl→color scale plus classification
+thresholds. It is pure data: renderable by the frontends, validatable and
+measurable by scripts, shareable with the community.
+
+- Format spec: `docs/ppl-scale-format.md`; machine checkable JSON Schema:
+  `docs/schemas/ppl-scale-v1.schema.json` (regenerate with
+  `npm run gen:schema -w @opengptdetect/core`).
+- Cross-language contract: `test-fixtures/ppl-color.golden.json` is consumed by
+  the TypeScript tests and `python tools/measure/verify_scales.py` — an
+  algorithm change on either side turns the other red.
+- The editor can export/import profiles in its settings dialog; the extension's
+  options page binds detected classes (zh/en) to built-in or imported profiles
+  and lets you override the color stops.
 
 ## Configuration
 
@@ -70,9 +87,13 @@ The service has two layers; hardware needs are decided by the llama.cpp build an
 
 ```
 ├─ server/          # FastAPI service + pluggable backends (api.py, backends/, requirements, .env.example)
-├─ docs/api.md      # API contract (routes, fields, error codes, FAQ)
-├─ editor/          # Vite + Vue 3 + CodeMirror frontend
-├─ extension/       # Chrome MV3 extension
+├─ docs/            # api.md, ppl-scale-format.md, schemas/ppl-scale-v1.schema.json
+├─ packages/core    # @opengptdetect/core: shared TS contracts, color scale, profile format
+├─ packages/ui      # @opengptdetect/ui: shadcn primitives + shared controlled components
+├─ editor/          # Vite + React + CodeMirror frontend (single-file HTML build)
+├─ extension/       # WXT + React Chrome MV3 extension
+├─ test-fixtures/   # cross-language golden fixture (TS + Python)
+├─ tools/measure/   # Python: schema validation + golden cross-check
 └─ README.md
 ```
 

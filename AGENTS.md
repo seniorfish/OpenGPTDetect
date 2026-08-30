@@ -12,8 +12,18 @@
   alignment, aggregation, backend switching, `__main__` entry.
 - `server/tests/..` — pytest contract tests; run on the mock backend, no model.
 - `docs/api.md` — API contract baseline.
+- `packages/core` — `@opengptdetect/core`: pure TS contracts/schemas (Zod), color
+  scale algorithm, measure/state/messages modules; single source for the profile
+  format (`src/scale.ts` + `gen:schema`).
+- `packages/ui` — `@opengptdetect/ui`: shadcn primitives + shared controlled
+  components (ColorStopsEditor, ProfileDialog); hosts provide design tokens.
 - `editor/..` — Vite + React + CodeMirror 6 frontend (Zustand + shadcn/ui + Zod at the API boundary), built to a single HTML; see `editor/AGENTS.md` for the adopted stack and rules.
-- `extension/..` — Chrome MV3 extension turning page text into PPL heatmaps.
+- `extension/..` — WXT + React Chrome MV3 extension turning page text into PPL heatmaps.
+- `test-fixtures/` — cross-language golden fixture (`ppl-color.golden.json`), read by
+  the TS vitest suite AND Python (`tools/measure/verify_scales.py`).
+- `docs/ppl-scale-format.md` (+ `docs/schemas/ppl-scale-v1.schema.json`) — profile
+  format spec + generated JSON Schema.
+- `tools/measure/` — Python: schema validation + golden cross-check.
 - root `README*.md` — overview and configuration.
 
 ## Common commands
@@ -25,6 +35,8 @@ cd server && BACKEND=mock python api.py         # model-free demo backend
 cd editor && npm run build                      # build single-file editor
 # editor e2e: start BACKEND=mock service on :8000, then:
 cd editor && node test/e2e.test.mjs
+npm run gen:schema -w @opengptdetect/core       # regenerate profile JSON Schema
+python tools/measure/verify_scales.py           # Python vs golden 2-jurisdiction check
 ```
 
 ## Code style

@@ -16,6 +16,21 @@
         { "ppl": 16.67, "color": "#ef4444" },
         { "ppl": 33.33, "color": "#7f1d1d" }
       ]
+    },
+    "edge-single-stop": {
+      "stops": [{ "ppl": 10, "color": "#112233" }]
+    },
+    "edge-duplicate-stops": {
+      "stops": [
+        { "ppl": 5, "color": "#111111" },
+        { "ppl": 5, "color": "#222222" }
+      ]
+    },
+    "edge-half-channel": {
+      "stops": [
+        { "ppl": 0, "color": "#000000" },
+        { "ppl": 2, "color": "#656565" }
+      ]
     }
   },
   "cases": [
@@ -37,6 +52,36 @@
     { "name": "en clamp high", "slot": "en-default-2026", "ppl": 999, "expected": "#7f1d1d" },
     { "name": "en mid 4-6", "slot": "en-default-2026", "ppl": 5, "expected": "#86bc33" },
     { "name": "en mid 6-16.67", "slot": "en-default-2026", "ppl": 11.335, "expected": "#ed7c26" },
-    { "name": "en mid 16.67-33.33", "slot": "en-default-2026", "ppl": 25, "expected": "#b73131" }
+    { "name": "en mid 16.67-33.33", "slot": "en-default-2026", "ppl": 25, "expected": "#b73131" },
+    {
+      "name": "single stop clamps low",
+      "slot": "edge-single-stop",
+      "ppl": 0,
+      "expected": "#112233"
+    },
+    {
+      "name": "single stop clamps high",
+      "slot": "edge-single-stop",
+      "ppl": 999,
+      "expected": "#112233"
+    },
+    {
+      "name": "duplicate stops use the later interval start",
+      "slot": "edge-duplicate-stops",
+      "ppl": 5,
+      "expected": "#111111"
+    },
+    {
+      "name": "duplicate stops shift to the following interval above",
+      "slot": "edge-duplicate-stops",
+      "ppl": 6,
+      "expected": "#222222"
+    },
+    {
+      "name": "half-channel rounds away from zero (Math.round semantics)",
+      "slot": "edge-half-channel",
+      "ppl": 1,
+      "expected": "#333333"
+    }
   ]
 }

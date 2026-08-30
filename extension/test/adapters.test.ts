@@ -22,25 +22,24 @@ beforeAll(() => {
 })
 import {
   ADAPTER_REGISTRY,
-  GENERIC_ADAPTER,
+  DEFAULT_ADAPTER,
   extractBlocksFor,
   matchAdapterUrl,
   type SiteAdapter,
-} from '../src/lib/adapters.ts'
+} from '../src/lib/adapters/index.ts'
 import { DEFAULT_SETTINGS } from '../src/lib/settings.ts'
 import { scan, type ScannedBlock } from '../src/lib/dom-scan.ts'
+
+function makeBody(paragraphs: string[]): HTMLElement {
+  document.body.innerHTML = ''
+  for (const t of paragraphs) document.body.appendChild(makeParagraph(t))
+  return document.body
+}
 
 function makeParagraph(text: string): HTMLElement {
   const p = document.createElement('p')
   p.textContent = text
   return p
-}
-
-function makeBody(paragraphs: string[]): HTMLElement {
-  const body = document.body
-  body.innerHTML = ''
-  for (const t of paragraphs) body.appendChild(makeParagraph(t))
-  return body
 }
 
 const SETTINGS = { ...DEFAULT_SETTINGS, minParagraphChars: 5 }
@@ -50,8 +49,8 @@ let originalRegistry: SiteAdapter[]
 beforeEach(() => {
   document.body.innerHTML = ''
   originalRegistry = [...ADAPTER_REGISTRY]
-  // Reset the registry to generic-only between tests.
-  ADAPTER_REGISTRY.splice(0, ADAPTER_REGISTRY.length, GENERIC_ADAPTER)
+  // Reset the registry to default-only between tests.
+  ADAPTER_REGISTRY.splice(0, ADAPTER_REGISTRY.length, DEFAULT_ADAPTER)
 })
 
 afterEach(() => {
@@ -59,16 +58,22 @@ afterEach(() => {
 })
 
 describe('adapter registry matching', () => {
-  it('generic matches any URL', () => {
-    expect(matchAdapterUrl('https://www.zhihu.com/question/1').id).toBe('generic')
-    expect(ADAPTER_REGISTRY[0]!.matches(new URL('https://example.com/a'))).toBe(true)
+  it('the default adapter matches any URL and is symmetric with site adapters', () => {
+    expect(matchAdapterUrl('https://www.zhihu.com/question/1')?.id).toBe('default')
+    expect(DEFAULT_ADAPTER.id).toBe('default')
+    expect(DEFAULT_ADAPTER.extract).toBeTypeOf('function') // same shape as any site adapter
+    expect(DEFAULT_ADAPTER.matches(new URL('https://example.com/a'))).toBe(true)
   })
 
-  it('first matching adapter wins (site-specific before generic)', () => {
-    const zhihu: SiteAdapter = { id: 'zhihu', matches: (u) => u.host === 'www.zhihu.com' }
+  it('first matching adapter wins (site-specific before default)', () => {
+    const zhihu: SiteAdapter = {
+      id: 'zhihu',
+      matches: (u) => u.host === 'www.zhihu.com',
+      extract: () => [],
+    }
     ADAPTER_REGISTRY.unshift(zhihu)
-    expect(matchAdapterUrl('https://www.zhihu.com/question/1').id).toBe('zhihu')
-    expect(matchAdapterUrl('https://example.com/').id).toBe('generic')
+    expect(matchAdapterUrl('https://www.zhihu.com/question/1')?.id).toBe('zhihu')
+    expect(matchAdapterUrl('https://example.com/')?.id).toBe('default')
   })
 
   it('returns undefined for an invalid URL', () => {
@@ -76,37 +81,59 @@ describe('adapter registry matching', () => {
   })
 })
 
-describe('extractBlocks (adapter-driven extraction)', () => {
-  it('falls back to the generic scanner when no adapter extracts', () => {
+describe('extractBlocksFor (adapter-driven extraction)', () => {
+  it('the default adapter produces the generic scan blocks', () => {
     const body = makeBody(['hello world here'])
-    const fromAdapter = extractBlocksFor('https://example.com/', body, SETTINGS)
-    const fromGeneric = scan(body, SETTINGS)
-    expect(fromAdapter.map((b) => b.text)).toEqual(fromGeneric.map((b) => b.text))
+    const blocks = extractBlocksFor('https://example.com/', body, SETTINGS)
+    expect(blocks.map((b) => b.text)).toEqual(scan(body, SETTINGS).map((b) => b.text))
   })
 
-  it('uses the matched adapter result and applies its exclude filter', () => {
+  it('uses the site adapter result when it produces blocks', () => {
     const card: SiteAdapter = {
       id: 'cards',
       matches: () => true,
       extract: (): ScannedBlock[] => [
         { el: document.querySelectorAll('p')[0]!, text: 'sample text' },
       ],
-      exclude: (el, url) => url.pathname === '/blocked' && el.tagName === 'P',
     }
     ADAPTER_REGISTRY.unshift(card)
     makeBody(['hello world here'])
-
-    // Normal path: adapter result passes through.
-    let blocks = extractBlocksFor('https://cards.example/ok', document.body, SETTINGS)
+    const blocks = extractBlocksFor('https://cards.example/', document.body, SETTINGS)
     expect(blocks).toHaveLength(1)
     expect(blocks[0]!.text).toBe('sample text')
-
-    // Blocked path: exclude() filters the adapter result out.
-    blocks = extractBlocksFor('https://cards.example/blocked', document.body, SETTINGS)
-    expect(blocks).toHaveLength(0)
   })
 
-  it('falls back to the generic scanner when the adapter throws', () => {
+  it('deferring to the default still applies the site adapter exclude filter', () => {
+    const filter: SiteAdapter = {
+      id: 'filter',
+      matches: () => true,
+      extract: () => null, // no site-specific extraction; use the generic scanner
+      exclude: (el) => el.textContent === 'noise paragraph',
+    }
+    ADAPTER_REGISTRY.unshift(filter)
+    makeBody(['hello world here', 'noise paragraph'])
+    const blocks = extractBlocksFor('https://filter.example/', document.body, SETTINGS)
+    expect(blocks.map((b) => b.text)).toEqual(['hello world here'])
+  })
+
+  it('exclude applies on top of site-adapter results', () => {
+    const card: SiteAdapter = {
+      id: 'cards',
+      matches: () => true,
+      extract: (): ScannedBlock[] => [
+        { el: document.querySelectorAll('p')[0]!, text: 'sample text' },
+      ],
+      exclude: (el, url) => url.pathname === '/blocked',
+    }
+    ADAPTER_REGISTRY.unshift(card)
+    makeBody(['hello world here'])
+    expect(extractBlocksFor('https://cards.example/ok', document.body, SETTINGS)).toHaveLength(1)
+    expect(extractBlocksFor('https://cards.example/blocked', document.body, SETTINGS)).toHaveLength(
+      0,
+    )
+  })
+
+  it('falls back to the default adapter when the site adapter throws', () => {
     const bomb: SiteAdapter = {
       id: 'bomb',
       matches: () => true,
@@ -116,7 +143,23 @@ describe('extractBlocks (adapter-driven extraction)', () => {
     }
     ADAPTER_REGISTRY.unshift(bomb)
     const body = makeBody(['hello world here'])
-    const blocks = extractBlocksFor('https://bomb.example/', body, SETTINGS)
-    expect(blocks.map((b) => b.text)).toEqual(['hello world here'])
+    expect(extractBlocksFor('https://bomb.example/', body, SETTINGS).map((b) => b.text)).toEqual([
+      'hello world here',
+    ])
+  })
+
+  it('passes the URL through to site adapter extract (section branching)', () => {
+    let seenUrl = ''
+    const section: SiteAdapter = {
+      id: 'section',
+      matches: () => true,
+      extract: ({ url }) => {
+        seenUrl = url.pathname
+        return null
+      },
+    }
+    ADAPTER_REGISTRY.unshift(section)
+    extractBlocksFor('https://zhihu.example/p/123', document.body, SETTINGS)
+    expect(seenUrl).toBe('/p/123')
   })
 })

@@ -31,7 +31,7 @@ import {
   getFlatText,
   type MeasurementUnit,
 } from '../lib/dom-scan.ts'
-import { extractBlocks } from '../lib/adapters.ts'
+import { extractBlocks } from '../lib/adapters/index.ts'
 import { createObserver, pickInitial, startMutationWatch } from '../lib/viewport.ts'
 import * as annotate from '../lib/annotate.ts'
 import { renderBlock } from '../lib/heatmap.ts'

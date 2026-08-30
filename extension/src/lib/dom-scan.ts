@@ -7,18 +7,53 @@ import type { ExtensionSettings } from './settings.ts'
 export const STATE_ATTR = 'data-ppl-state'
 
 const BLOCK_TAGS = new Set([
-  'P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-  'BLOCKQUOTE', 'DD', 'DT', 'FIGCAPTION', 'TD', 'TH', 'CAPTION'
+  'P',
+  'LI',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'BLOCKQUOTE',
+  'DD',
+  'DT',
+  'FIGCAPTION',
+  'TD',
+  'TH',
+  'CAPTION',
 ])
 const SKIP_TAGS = new Set([
-  'SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'OBJECT', 'SVG', 'CANVAS',
-  'BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'OPTION',
-  'NAV', 'HEADER', 'FOOTER', 'ASIDE'
+  'SCRIPT',
+  'STYLE',
+  'NOSCRIPT',
+  'IFRAME',
+  'OBJECT',
+  'SVG',
+  'CANVAS',
+  'BUTTON',
+  'INPUT',
+  'TEXTAREA',
+  'SELECT',
+  'OPTION',
+  'NAV',
+  'HEADER',
+  'FOOTER',
+  'ASIDE',
 ])
 
 export interface ScannedBlock {
   el: HTMLElement
   text: string
+  /**
+   * Unit boundary for the measurement-unit merger (site adapters use this to
+   * keep neighbouring articles apart):
+   * - 'before': never merge this block into the previous unit (start a new one);
+   * - 'after': close the current unit right after this block;
+   * - 'both': this block is its own unit.
+   * Generic scanning blocks carry no boundary -> unchanged merging behaviour.
+   */
+  unitBoundary?: 'before' | 'after' | 'both'
 }
 
 export interface FlatNode {
@@ -47,7 +82,8 @@ export interface MeasurementUnit {
 
 function isHidden(el: Element): boolean {
   const cs = getComputedStyle(el)
-  if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0) return true
+  if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity) === 0)
+    return true
   const r = el.getBoundingClientRect()
   if (r.width === 0 && r.height === 0) return true
   return false
@@ -72,7 +108,10 @@ function directTextLength(el: Element): number {
 function isCandidate(el: Element, mode: string): boolean {
   if (isHidden(el) || shouldSkip(el)) return false
   if (BLOCK_TAGS.has(el.tagName)) return true
-  if (mode === 'all' && (el.tagName === 'DIV' || el.tagName === 'SPAN' || el.tagName === 'SECTION')) {
+  if (
+    mode === 'all' &&
+    (el.tagName === 'DIV' || el.tagName === 'SPAN' || el.tagName === 'SECTION')
+  ) {
     return directTextLength(el) >= 4
   }
   return false
@@ -92,7 +131,7 @@ export function getFlatText(el: Element): FlatText {
         return NodeFilter.FILTER_REJECT
       }
       return NodeFilter.FILTER_ACCEPT
-    }
+    },
   })
   let n = walker.nextNode() as Text | null
   while (n) {
@@ -146,7 +185,7 @@ export function scan(root: Element, settings: ExtensionSettings): ScannedBlock[]
       if (shouldSkip(el)) return NodeFilter.FILTER_REJECT
       if (isCandidate(el, mode)) return NodeFilter.FILTER_ACCEPT
       return NodeFilter.FILTER_SKIP
-    }
+    },
   })
   let n = 0
   let cur = walker.nextNode() as Element | null
@@ -167,20 +206,30 @@ export function scan(root: Element, settings: ExtensionSettings): ScannedBlock[]
 }
 
 /** Group adjacent short blocks into one measurement unit. */
-export function groupUnits(candidates: ScannedBlock[], settings: ExtensionSettings): MeasurementUnit[] {
+export function groupUnits(
+  candidates: ScannedBlock[],
+  settings: ExtensionSettings,
+): MeasurementUnit[] {
   if (!settings.mergeAdjacentShortParagraphs) {
     return candidates.map((c) => ({
       blocks: [{ el: c.el, text: c.text }],
       text: c.text,
-      offsets: [{ start: 0, end: c.text.length }]
+      offsets: [{ start: 0, end: c.text.length }],
     }))
   }
   const gap = settings.mergeMaxGapChars
   const units: MeasurementUnit[] = []
   let cur: MeasurementUnit | null = null
+
   for (const c of candidates) {
+    const boundaryBefore = c.unitBoundary === 'before' || c.unitBoundary === 'both'
+    const boundaryAfter = c.unitBoundary === 'after' || c.unitBoundary === 'both'
+    if (boundaryBefore) {
+      if (cur) units.push(cur)
+      cur = null
+    }
     const short = c.text.length <= gap
-    if (short && cur && cur.text.length + c.text.length + 1 <= settings.maxCharsPerRequest) {
+    if (cur && short && cur.text.length + c.text.length + 1 <= settings.maxCharsPerRequest) {
       const start = cur.text.length + 1
       cur.text = cur.text + '\n' + c.text
       cur.blocks.push({ el: c.el, text: c.text })
@@ -190,8 +239,12 @@ export function groupUnits(candidates: ScannedBlock[], settings: ExtensionSettin
       cur = {
         blocks: [{ el: c.el, text: c.text }],
         text: c.text,
-        offsets: [{ start: 0, end: c.text.length }]
+        offsets: [{ start: 0, end: c.text.length }],
       }
+    }
+    if (boundaryAfter) {
+      if (cur) units.push(cur)
+      cur = null
     }
   }
   if (cur) units.push(cur)

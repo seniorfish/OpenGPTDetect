@@ -2,7 +2,7 @@
 import { beforeAll, describe, it, expect } from 'vitest'
 import { BUILTIN_PROFILES } from '@opengptdetect/core'
 import { DEFAULT_SETTINGS } from '../src/lib/settings.ts'
-import { scan, groupUnits, getFlatText } from '../src/lib/dom-scan.ts'
+import { scan, groupUnits, getFlatText, type ScannedBlock } from '../src/lib/dom-scan.ts'
 import { renderBlock } from '../src/lib/heatmap.ts'
 
 // jsdom's getBoundingClientRect is always 0x0, which `isHidden()` would read as
@@ -10,13 +10,23 @@ import { renderBlock } from '../src/lib/heatmap.ts'
 beforeAll(() => {
   Object.defineProperty(Element.prototype, 'getBoundingClientRect', {
     configurable: true,
-    value: () => ({ width: 100, height: 100, top: 0, left: 0, bottom: 0, right: 0, x: 0, y: 0, toJSON: () => ({}) })
+    value: () => ({
+      width: 100,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 0,
+      right: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }),
   })
 })
 
 const settings = (patch: Partial<typeof DEFAULT_SETTINGS> = {}): typeof DEFAULT_SETTINGS => ({
   ...DEFAULT_SETTINGS,
-  ...patch
+  ...patch,
 })
 
 describe('dom-scan', () => {
@@ -41,16 +51,67 @@ describe('dom-scan', () => {
   })
 
   it('groups adjacent short paragraphs into one unit', () => {
-    document.body.innerHTML = '<p id="a">short one</p><p id="b">short two</p><p id="c">a long paragraph here</p>'
+    document.body.innerHTML =
+      '<p id="a">short one</p><p id="b">short two</p><p id="c">a long paragraph here</p>'
     // gap = 10: 'short one'/'short two' (9 chars) merge; 'a long...' (22) does not.
     const units = groupUnits(
       scan(document.body, settings({ minParagraphChars: 1 })),
-      settings({ mergeMaxGapChars: 10 })
+      settings({ mergeMaxGapChars: 10 }),
     )
     expect(units).toHaveLength(2)
     expect(units[0]!.blocks.map((b) => b.el.id)).toEqual(['a', 'b'])
     expect(units[0]!.text).toBe('short one\nshort two')
     expect(units[1]!.blocks[0]!.el.id).toBe('c')
+  })
+})
+
+describe('unitBoundary merging (site adapters keep articles apart)', () => {
+  // Same block texts as the merge test: 'a','b' short (<=10), 'c' long.
+  const blocks = (): ScannedBlock[] => [
+    { el: makeEl(), text: 'short one', unitBoundary: 'before' },
+    { el: makeEl(), text: 'short two', unitBoundary: 'after' },
+    { el: makeEl(), text: 'a long paragraph here' },
+  ]
+  const makeEl = (): HTMLElement => document.createElement('p')
+  const s = settings({ minParagraphChars: 1, mergeMaxGapChars: 10 })
+
+  it("'before' starts a new unit (never merges into the previous one)", () => {
+    // 'b' gets the boundary when it is its own article start.
+    const bs = [
+      { el: makeEl(), text: 'short one' },
+      { el: makeEl(), text: 'short two', unitBoundary: 'before' as const },
+    ]
+    const units = groupUnits(bs, s)
+    expect(units).toHaveLength(2)
+    expect(units[0]!.text).toBe('short one')
+    expect(units[1]!.text).toBe('short two')
+  })
+
+  it("'after' closes the unit after this block (same article may still merge up to it)", () => {
+    const units = groupUnits(blocks(), s)
+    // a+b merge (short), then 'after' closes the pair; c starts its own unit.
+    expect(units).toHaveLength(2)
+    expect(units[0]!.text).toBe('short one\nshort two')
+    expect(units[1]!.text).toBe('a long paragraph here')
+  })
+
+  it("'both' makes a block its own unit", () => {
+    const bs = [
+      { el: makeEl(), text: 'short one', unitBoundary: 'both' as const },
+      { el: makeEl(), text: 'short two' },
+    ]
+    const units = groupUnits(bs, s)
+    expect(units).toHaveLength(2)
+    expect(units[0]!.text).toBe('short one')
+    expect(units[1]!.text).toBe('short two')
+  })
+
+  it('no boundary keeps the original merging behaviour', () => {
+    const bs = [
+      { el: makeEl(), text: 'short one' },
+      { el: makeEl(), text: 'short two' },
+    ]
+    expect(groupUnits(bs, s)).toHaveLength(1)
   })
 })
 
@@ -62,7 +123,7 @@ describe('heatmap renderBlock (inline styles only)', () => {
     const stops = BUILTIN_PROFILES[0]!.scale.stops
     const tokens = [
       { ppl: 12, text: 'Hello', char_start: 0, char_end: 5 },
-      { ppl: 50, text: ' world', char_start: 5, char_end: 11 }
+      { ppl: 50, text: ' world', char_start: 5, char_end: 11 },
     ]
     renderBlock(el, flat, tokens, 0, 11, settings({ heatmapEnabled: true }), stops)
     const spans = el.querySelectorAll('span.ppl-tok')

@@ -108,7 +108,6 @@
   "modal.settings.style": "Style",
   "modal.settings.styleBackground": "Background",
   "modal.settings.styleUnderline": "Underline",
-  "modal.settings.styleBoth": "Background + underline",
   "modal.settings.opacity": "Opacity",
   "modal.settings.fontSize": "Font size",
   "modal.settings.fontFamily": "Font family",

@@ -33,7 +33,7 @@ export interface Chunk extends Range {
 
 // Chunking / heat-map rendering configuration
 export type ChunkMode = 'token' | 'sentence' | 'paragraph'
-export type HeatStyle = 'background' | 'underline' | 'both'
+export type HeatStyle = 'background' | 'underline'
 
 export interface ColorStop {
   ppl: number

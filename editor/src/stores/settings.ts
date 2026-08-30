@@ -17,7 +17,12 @@ export interface SettingsStore {
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
-  settings: { ...DEFAULT_SETTINGS, ...loadSettings() },
+  settings: (() => {
+    const loaded = loadSettings()
+    // The retired "both" style is coerced to background (legacy persisted data).
+    if (loaded.style === ('both' as HeatStyle)) loaded.style = 'background' as HeatStyle
+    return { ...DEFAULT_SETTINGS, ...loaded }
+  })(),
   patchSettings: (patch) => {
     const next = { ...get().settings, ...patch }
     saveSettingsJson(next)

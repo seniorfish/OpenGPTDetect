@@ -17,9 +17,13 @@ export function ColorStopsEditor() {
     useSettingsStore.getState().patchSettings({ stops: next })
   }
 
-  function onPplChange(index: number, value: string): void {
+  function onPplCommit(index: number, value: string): void {
+    // Commit on blur only, so typing "1" while editing "12" never re-sorts or
+    // steals focus mid-edit.
+    const n = Number(value)
+    if (value.trim() === '' || Number.isNaN(n)) return
     const next = stops.map((s) => ({ ...s }))
-    next[index]!.ppl = Math.max(0, Number(value) || 0)
+    next[index]!.ppl = Math.max(0, n)
     next.sort((a, b) => a.ppl - b.ppl)
     patchStops(next)
   }
@@ -51,11 +55,12 @@ export function ColorStopsEditor() {
           <span className="shrink-0 text-[11px] text-muted-foreground">{t('modal.settings.stopPpl')}</span>
           <Input
             type="number"
-            value={s.ppl}
+            defaultValue={s.ppl}
             min="0"
             step="0.01"
             className="h-7 w-20 text-sm"
-            onChange={(e) => onPplChange(i, e.target.value)}
+            onBlur={(e) => onPplCommit(i, e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           />
           <span
             className="h-7 w-8 shrink-0 cursor-pointer overflow-hidden rounded-md border"

@@ -108,7 +108,6 @@
   "modal.settings.style": "呈现样式",
   "modal.settings.styleBackground": "背景色",
   "modal.settings.styleUnderline": "下划线",
-  "modal.settings.styleBoth": "背景 + 下划线",
   "modal.settings.opacity": "不透明度",
   "modal.settings.fontSize": "字号",
   "modal.settings.fontFamily": "字体",

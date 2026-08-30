@@ -38,19 +38,16 @@ const DEFAULT_EDITOR_CONFIG: EditorConfig = {
 
 // ---------- Decoration styles ----------
 function heatStyle(hex: string, config: EditorConfig): string {
-  const parts: string[] = []
-  if (config.style === 'background' || config.style === 'both') {
-    parts.push(`background-color: ${rgba(hex, config.opacity)}`)
-  }
-  if (config.style === 'underline' || config.style === 'both') {
-    parts.push(
+  if (config.style === 'underline') {
+    return [
       'text-decoration: underline',
       `text-decoration-color: ${hex}`,
       'text-decoration-thickness: 2px',
       'text-underline-offset: 3px'
-    )
+    ].join('; ')
   }
-  return parts.join('; ')
+  // Background (the default): the only style where opacity applies.
+  return `background-color: ${rgba(hex, config.opacity)}`
 }
 
 function ignoredStyle(): string {

@@ -31,8 +31,7 @@ const fields: Field[] = [
     kind: 'select', key: 'style', labelKey: 'modal.settings.style',
     options: [
       { value: 'background', labelKey: 'modal.settings.styleBackground' },
-      { value: 'underline', labelKey: 'modal.settings.styleUnderline' },
-      { value: 'both', labelKey: 'modal.settings.styleBoth' }
+      { value: 'underline', labelKey: 'modal.settings.styleUnderline' }
     ]
   },
   { kind: 'slider', key: 'opacity', labelKey: 'modal.settings.opacity' },
@@ -65,11 +64,14 @@ export function SettingsDialog() {
     patch({ opacity: clamp(value?.[0] ?? settings.opacity, 0.05, 1) })
   }
 
-  function onNumberChange(field: Field & { kind: 'number' }, value: string): void {
-    patch({ [field.key]: clamp(Number(value) || 16, field.min, field.max) })
+  function onNumberCommit(field: Field & { kind: 'number' }, value: string): void {
+    // Commit on blur only: typing mid-edit must never be clamped/overwritten.
+    const n = Number(value)
+    if (value.trim() === '' || Number.isNaN(n)) return
+    patch({ [field.key]: clamp(n, field.min, field.max) })
   }
 
-  function onTextChange(field: Field & { kind: 'text' }, value: string): void {
+  function onTextCommit(field: Field & { kind: 'text' }, value: string): void {
     const v = value.trim()
     if (!v) return
     patch({ [field.key]: v })
@@ -95,9 +97,9 @@ export function SettingsDialog() {
               <Input
                 id="set-url"
                 type="text"
-                value={settings.serverUrl}
+                defaultValue={settings.serverUrl}
                 placeholder="http://127.0.0.1:8000"
-                onChange={(e) => onTextChange(fields[0] as Field & { kind: 'text' }, e.target.value)}
+                onBlur={(e) => onTextCommit(fields[0] as Field & { kind: 'text' }, e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               />
             </FieldRow>
@@ -122,20 +124,22 @@ export function SettingsDialog() {
                 </SelectContent>
               </Select>
             </FieldRow>
-            <FieldRow label={t('modal.settings.opacity')}>
-              <div className="flex items-center gap-3">
-                <Slider
-                  id="set-opacity"
-                  value={[settings.opacity]}
-                  min={0.05}
-                  max={1}
-                  step={0.05}
-                  className="max-w-52"
-                  onValueChange={onOpacityChange}
-                />
-                <span id="opacity-val" className="w-10 text-xs tabular-nums text-foreground">{opacityPct}</span>
-              </div>
-            </FieldRow>
+            {settings.style === 'background' && (
+              <FieldRow label={t('modal.settings.opacity')}>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    id="set-opacity"
+                    value={[settings.opacity]}
+                    min={0.05}
+                    max={1}
+                    step={0.05}
+                    className="max-w-52"
+                    onValueChange={onOpacityChange}
+                  />
+                  <span id="opacity-val" className="w-10 text-xs tabular-nums text-foreground">{opacityPct}</span>
+                </div>
+              </FieldRow>
+            )}
           </section>
 
           <Separator />
@@ -147,12 +151,12 @@ export function SettingsDialog() {
               <Input
                 id="set-font-size"
                 type="number"
-                value={settings.fontSize}
+                defaultValue={settings.fontSize}
                 min={10}
                 max={32}
                 step="1"
                 className="w-24"
-                onChange={(e) => onNumberChange(fields[3] as Field & { kind: 'number' }, e.target.value)}
+                onBlur={(e) => onNumberCommit(fields[3] as Field & { kind: 'number' }, e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               />
             </FieldRow>
@@ -161,9 +165,9 @@ export function SettingsDialog() {
                 <Input
                   id="set-font-family"
                   type="text"
-                  value={settings.fontFamily}
+                  defaultValue={settings.fontFamily}
                   list="font-list"
-                  onChange={(e) => onTextChange(fields[4] as Field & { kind: 'text' }, e.target.value)}
+                  onBlur={(e) => onTextCommit(fields[4] as Field & { kind: 'text' }, e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                 />
                 <datalist id="font-list">

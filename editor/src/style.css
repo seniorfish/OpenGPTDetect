@@ -7,6 +7,16 @@
  */
 @import "tailwindcss";
 
+/* Brand display font: Space Grotesk (SIL OFL 1.1). A single latin woff2
+   variable face (400-700), inlined as a data-URI into the single-file build. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./assets/fonts/space-grotesk.woff2') format('woff2');
+}
+
 /* `dark:` variants match any element inside an ancestor with class `dark`. */
 @custom-variant dark (&:is(.dark *));
 
@@ -74,6 +84,7 @@
 @theme {
   --font-sans: 'Segoe UI', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Mono', Consolas, 'Courier New', ui-monospace, monospace;
+  --font-display: 'Space Grotesk', 'Segoe UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
 /* ---------- Map tokens to Tailwind color/radius utilities ---------- */

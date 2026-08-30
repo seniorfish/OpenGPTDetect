@@ -4,7 +4,7 @@
 // command registry (`useCommands`) so the header can never drift from the
 // Ctrl+K palette: a command added in commands.ts shows up in both places.
 import {
-  Activity, Check, ChevronsUpDown, Languages, ListFilter, Loader2, Monitor,
+  Check, ChevronsUpDown, Languages, ListFilter, Loader2, Monitor,
   Moon, Palette, Play, Search, Sun
 } from 'lucide-react'
 import { useI18n } from '@/i18n.ts'
@@ -76,14 +76,24 @@ export function AppHeader({ onOpenPalette }: AppHeaderProps) {
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-1.5 border-b bg-background px-3">
-      {/* Brand */}
-      <div className="mr-1 flex select-none items-center gap-2">
-        <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Activity className="size-4" />
+      {/* Brand — links to the project repo; "PPL" wears the heat-map colors */}
+      <a
+        href="https://github.com/seniorfish/OpenGPTDetect"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="OpenGPTDetect · GitHub"
+        className="mr-1 -ml-1 flex select-none flex-col items-start rounded-md px-1 py-1 font-display leading-tight transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="text-[15px] font-bold tracking-tight text-foreground">OpenGPTDetect</span>
+        <span className="text-[11px] tracking-tight text-foreground/70">
+          <span className="font-semibold tracking-tight">
+            <span className="text-[#d85c50]">P</span>
+            <span className="text-[#cf8a2c]">P</span>
+            <span className="text-[#46976a]">L</span>
+          </span>{' '}
+          Editor
         </span>
-        <span className="text-sm font-semibold tracking-tight">PPL</span>
-        <span className="hidden text-xs text-muted-foreground md:inline">Perplexity</span>
-      </div>
+      </a>
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

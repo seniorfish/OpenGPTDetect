@@ -1,3 +1,1 @@
-# CLAUDE.md — project alias
-
-@AGENTS.md
+IMPORTANT: READ @AGENTS.md

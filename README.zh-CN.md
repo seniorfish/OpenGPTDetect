@@ -13,7 +13,7 @@
 |---|---|---|
 | **PPL 分析服务**（后端） | `server/api.py` + `server/backends/` | FastAPI + llama.cpp，逐 token NLL / PPL，缓存友好的两步式接口，可切换后端 |
 | **API 协议** | `docs/api.md` | 服务端接口定义、数据模型、字段语义 |
-| **页面编辑器** | `editor/` | Vite + Vue 3 + CodeMirror 6 的困惑度文本编辑器，构建为单个 HTML |
+| **页面编辑器** | `editor/` | CodeMirror 6 的困惑度文本编辑器，基于 Vite + React（Zustand + shadcn/ui），构建为单个 HTML |
 | **Chrome 插件** | `extension/` | MV3 插件，在网页上以热力图 + 标注显示文本困惑度 |
 
 四个端（编辑器、插件、curl/脚本、服务测试）共享同一份 API 契约，见 `docs/api.md`。
@@ -71,7 +71,7 @@ curl -X POST "http://127.0.0.1:8000/ppl" \
 ```
 ├─ server/          # FastAPI 服务 + 可插拔后端（api.py、backends/、requirements、.env.example）
 ├─ docs/api.md      # API 协议（契约基线：路由、字段、错误码、FAQ）
-├─ editor/          # Vite + Vue 3 + CodeMirror 前端
+├─ editor/          # Vite + React + CodeMirror 前端
 ├─ extension/       # Chrome MV3 插件
 └─ README.md
 ```

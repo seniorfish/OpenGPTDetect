@@ -1,35 +1,8 @@
 // ---------- Shared data contracts ----------
+// Backend response types re-export from schemas.ts (the single source); the
+// shapes below are app-internal (indices are UTF-16 code units).
+export type { HealthResponse, PplResponse, TokenDetail } from './schemas.ts'
 
-// Backend HTTP responses (endpoints implemented in server/)
-export interface HealthResponse {
-  status: string
-  model: string
-  n_ctx: number
-  max_char_count: number
-  n_vocab: number
-  nll_backend: string
-}
-
-/** One token's detail as returned by POST /ppl (char indices are Python code points) */
-export interface TokenDetail {
-  token_index: number
-  token_id: number
-  token_text: string
-  nll: number | null
-  ppl: number | null
-  char_start: number | null
-  char_end: number | null
-}
-
-export interface PplResponse {
-  average_ppl: number
-  average_nll: number
-  token_count: number
-  char_count: number
-  token_details: TokenDetail[]
-}
-
-// App-internal structures (indices are UTF-16 code units)
 /** A [start, end) half-open span in UTF-16 code units */
 export interface Range {
   start: number
@@ -84,7 +57,7 @@ export interface Settings {
 /**
  * Subset of `Settings` consumed by the raw editor layer. Injected into
  * `createEditor` as a `getConfig: () => EditorConfig` accessor so the editor
- * never depends on the app's reactive settings singleton.
+ * never depends on the app's settings store.
  */
 export interface EditorConfig {
   chunkMode: ChunkMode

@@ -1,4 +1,4 @@
-# Editor UI — Design System ("shadcn-vue + Tailwind v4")
+# Editor UI — Design System ("shadcn/ui + Tailwind v4")
 
 ## 1. The organizing principle
 
@@ -12,7 +12,7 @@ hand-placed widgets, so the UI can never drift from the model behind it:
    visibleWhen?, run }`.
 
    The *same* array drives three surfaces at once:
-   - the Ctrl+K **command palette** (`CommandPalette.vue` groups by `group`),
+   - the Ctrl+K **command palette** (`CommandPalette.tsx` groups by `group`),
    - the **header menus/buttons** (the ignore menu, presets menu, theme menu and
      lang menu are built from `useCommands().commands`),
    - keyboard discoverability — every shortcut hint shown by the palette is the
@@ -24,7 +24,7 @@ hand-placed widgets, so the UI can never drift from the model behind it:
    button) and points them at the same shared handlers (`setChunkMode`,
    `toggleAutoRefresh`) the commands run.
 
-2. **`SettingsDialog.vue`'s `fields` array** — one declarative row per setting:
+2. **`SettingsDialog.tsx`'s `fields` array** — one declarative row per setting:
    `{ kind: 'text' | 'number' | 'select' | 'slider', key, labelKey, options?,
    min?, max?, commit }`. The template renders each row generically; the `commit`
    callback fires the right refresh (`settingsChanged` / `fontChanged` /
@@ -35,18 +35,18 @@ ad-hoc button pile.
 
 ## 2. Component / primitive layer
 
-- **Primitives**: `reka-ui` v2 (select/dropdown/dialog/slider/switch/
-  toggle-group/tooltip/listbox). shadcn-vue components were installed via the
-  official CLI (`npx shadcn-vue add ...`) into `src/components/ui/`, so they are
+- **Primitives**: Radix UI (select/dropdown/dialog/slider/switch/
+  toggle-group/tooltip). shadcn/ui components were copied into
+  `src/components/ui/`, so they are
   the canonical new-york style implementations.
-- **Icons**: `@lucide/vue` (the current lucide package; named imports only).
-- **Toasts**: `vue-sonner` mounted once in `App.vue` (`<Sonner position
-  ="bottom-center" :theme="resolved"/>`), bridged through the existing
+- **Icons**: `lucide-react` (named imports only).
+- **Toasts**: `sonner` mounted once in `App.tsx` (`<Toaster position
+  ="bottom-center" theme={resolved}/>`), bridged through the existing
   `useToasts.ts` `toast(msg, type)` contract so every call site is unchanged.
 - **Persisted UI state**: theme (`src/theme.ts`, `ppl-editor.theme.v1`) and the
   existing settings/presets/local keys. No new ad-hoc storage.
 
-Layout skeleton (`App.vue`):
+Layout skeleton (`App.tsx`):
 
 ```
 ┌ header (h-14, border-b) ────────────────┐
@@ -86,9 +86,9 @@ Layout skeleton (`App.vue`):
   `useCommands()` in `commands.ts`; pick a `group` (or add a group to
   `COMMAND_GROUPS` + its i18n key). It is then in the palette *and* reachable by
   skipping to a header menu; to give it a dedicated header button, `byId` it in
-  `AppHeader.vue`. No unrelated files change.
+  `AppHeader.tsx`. No unrelated files change.
 - **A new setting** (e.g. "line wrap"): add one row to `fields` in
-  `SettingsDialog.vue` with its label keys in `zh.json`/`en.json`; the generic
+  `SettingsDialog.tsx` with its label keys in `zh.json`/`en.json`; the generic
   renderer + `commit`-callback handles the rest. Persistent storage is already
   wired (`saveSettings()`).
 - **A new theme / language / chunk mode**: it is a state-valued command with an
@@ -96,7 +96,7 @@ Layout skeleton (`App.vue`):
   `chunkToken/Sentence/Paragraph`) — the palette and menus render the checked
   state for free.
 - **A new panel** (e.g. a token inspector): mount it inside the flex column in
-  `App.vue`; if it needs to run an existing action, just call the same handler
+  `App.tsx`; if it needs to run an existing action, just call the same handler
   the commands call — never duplicate logic.
 - **i18n**: every new string is one key in `zh.json` (master) and `en.json`;
   `MessageKey` typing (via the `_enSchemaCheck`) makes missing keys a typecheck

@@ -1,4 +1,4 @@
-// ---------- Tailwind class composer: merge conflicting shadcn classes ----------
+// cn() helper shared by the shadcn/ui primitives.
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 

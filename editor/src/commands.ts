@@ -4,20 +4,23 @@
 // array drives BOTH the Ctrl+K command palette and the header's menus/button
 // groups, so a new feature is exactly one registry entry (plus, for settings,
 // one row in the settings dialog's declarative field list) — never an ad-hoc
-// button pile.
-import type { LucideIcon } from '@lucide/vue'
-import { computed, type ComputedRef } from 'vue'
+// button pile. The array is rebuilt by `useCommands` whenever the states that
+// govern active/disabled/visible change, so those selectors are plain booleans
+// rather than functions.
+import type { LucideIcon } from 'lucide-react'
+import { useMemo } from 'react'
 import {
   AlignLeft, ArrowUpToLine, Ban, ChevronDown, ChevronUp, Languages, Maximize,
   Monitor, Moon, Palette, Play, Quote, RefreshCw, Save, ScanText, Settings,
   SlidersHorizontal, Sun, Undo2, Redo2
-} from '@lucide/vue'
+} from 'lucide-react'
 import type { MessageKey } from './i18n.ts'
 import { t as globalT } from './i18n.ts'
-import { settings, saveSettings, applyPreset } from './composables/useSettings.ts'
-import { usePresetTable } from './composables/usePresets.ts'
-import { useApp } from './composables/useApp.ts'
-import { useTheme } from './theme.ts'
+import { useSettingsStore } from './stores/settings.ts'
+import { usePresetsStore } from './stores/presets.ts'
+import { useAppStore } from './stores/app.ts'
+import { useTheme, setTheme } from './theme.ts'
+import { setLocale, useI18n } from './i18n.ts'
 import { toast } from './composables/useToasts.ts'
 import type { ChunkMode } from './types.ts'
 
@@ -44,23 +47,10 @@ export interface CommandDef {
   /** Human-readable shortcut hint rendered as a <kbd> in the palette/menus. */
   shortcut?: string
   /** True when the command represents the current state (chunk mode, theme, lang). */
-  active?: () => boolean
-  disabled?: () => boolean
-  visibleWhen?: () => boolean
+  active?: boolean
+  disabled?: boolean
+  visibleWhen?: boolean
   run: () => void
-}
-
-// ---------- Live app references (module singletons) ----------
-const app = useApp()
-const { state, settingsChanged, autoRefreshChanged } = app
-const { theme, setTheme } = useTheme()
-
-// The locale switching hook is registered by App.vue after the i18n instance is live.
-let setLocale: (locale: 'zh' | 'en') => void = () => {}
-let getLocale: () => 'zh' | 'en' = () => 'zh'
-export function initLocaleHooks(set: typeof setLocale, get: typeof getLocale): void {
-  setLocale = set
-  getLocale = get
 }
 
 // Histogram window actions are mounted by HistogramPanel so the palette and the
@@ -76,20 +66,7 @@ export function registerHistoActions(actions: Record<HistoAction, () => void>): 
   Object.assign(histoActions, actions)
 }
 
-// ---------- Shared action handlers (also used by header controls / menus) ----------
-export function setChunkMode(mode: ChunkMode): void {
-  settings.chunkMode = mode
-  saveSettings()
-  settingsChanged()
-}
-
-export function toggleAutoRefresh(): void {
-  settings.autoRefresh = !settings.autoRefresh
-  saveSettings()
-  autoRefreshChanged(settings.autoRefresh)
-}
-
-function chunkModeCommand(mode: ChunkMode, icon: LucideIcon): CommandDef {
+function chunkModeCommand(mode: ChunkMode, icon: LucideIcon, chunkMode: ChunkMode): CommandDef {
   const titleKey = `cmd.chunk${mode.charAt(0).toUpperCase() + mode.slice(1)}`
   return {
     id: `chunk:${mode}`,
@@ -97,12 +74,12 @@ function chunkModeCommand(mode: ChunkMode, icon: LucideIcon): CommandDef {
     keywords: ['chunk', mode, 'display'],
     group: 'display',
     icon,
-    active: () => settings.chunkMode === mode,
-    run: () => setChunkMode(mode)
+    active: chunkMode === mode,
+    run: () => useSettingsStore.getState().setChunkMode(mode)
   }
 }
 
-function windowCommand(id: string, action: HistoAction, titleKey: MessageKey, icon: LucideIcon): CommandDef {
+function windowCommand(id: string, action: HistoAction, titleKey: MessageKey, icon: LucideIcon, visible: boolean): CommandDef {
   return {
     id,
     titleKey,
@@ -110,18 +87,24 @@ function windowCommand(id: string, action: HistoAction, titleKey: MessageKey, ic
     run: () => histoActions[action](),
     keywords: ['window', 'layer', 'percentile'],
     group: 'window',
-    visibleWhen: () => settings.chunkMode === 'token'
+    visibleWhen: visible
   }
 }
 
 /**
- * The full command list. Preset-load entries are generated from the (reactive)
- * preset table, so saving a new preset immediately makes it searchable.
+ * The full command list. Preset-load entries are generated from the preset
+ * table, so saving a new preset immediately makes it searchable. Rebuilt when
+ * chunk mode / auto-refresh / flight state / theme / locale / presets change.
  */
-export function useCommands(): { groups: typeof COMMAND_GROUPS; commands: ComputedRef<CommandDef[]> } {
-  const commands = computed<CommandDef[]>(() => {
-    const presets = usePresetTable()
+export function useCommands(): { groups: typeof COMMAND_GROUPS; commands: CommandDef[] } {
+  const chunkMode = useSettingsStore((s) => s.settings.chunkMode)
+  const autoRefresh = useSettingsStore((s) => s.settings.autoRefresh)
+  const inFlight = useAppStore((s) => s.inFlight)
+  const presets = usePresetsStore((s) => s.presets)
+  const { theme } = useTheme()
+  const { locale } = useI18n()
 
+  const commands = useMemo<CommandDef[]>(() => {
     const base: CommandDef[] = [
       {
         id: 'analyze',
@@ -130,8 +113,8 @@ export function useCommands(): { groups: typeof COMMAND_GROUPS; commands: Comput
         group: 'run',
         icon: Play,
         shortcut: 'Ctrl+Enter',
-        disabled: () => state.inFlight,
-        run: () => void app.analyze(true)
+        disabled: inFlight,
+        run: () => void useAppStore.getState().analyze(true)
       },
       {
         id: 'autoRefresh',
@@ -139,28 +122,28 @@ export function useCommands(): { groups: typeof COMMAND_GROUPS; commands: Comput
         keywords: ['auto', 'refresh', 'watch'],
         group: 'run',
         icon: RefreshCw,
-        active: () => settings.autoRefresh,
-        run: toggleAutoRefresh
+        active: autoRefresh,
+        run: () => useSettingsStore.getState().toggleAutoRefresh()
       },
-      { id: 'undo', titleKey: 'cmd.undo', keywords: ['undo', 'history'], group: 'edit', icon: Undo2, shortcut: 'Ctrl+Z', run: () => app.undo() },
-      { id: 'redo', titleKey: 'cmd.redo', keywords: ['redo', 'history'], group: 'edit', icon: Redo2, shortcut: 'Ctrl+Y', run: () => app.redo() },
-      chunkModeCommand('token', ScanText),
-      chunkModeCommand('sentence', Quote),
-      chunkModeCommand('paragraph', AlignLeft),
-      windowCommand('winDown', 'shiftDown', 'cmd.windowShiftDown', ChevronDown),
-      windowCommand('winUp', 'shiftUp', 'cmd.windowShiftUp', ChevronUp),
-      windowCommand('winTop', 'toTop', 'cmd.windowTop', ArrowUpToLine),
-      windowCommand('winAll', 'toAll', 'cmd.windowAll', Maximize),
-      { id: 'ignoreSelection', titleKey: 'cmd.ignoreSelection', keywords: ['ignore', 'selection', 'exclude'], group: 'ignore', icon: Ban, run: () => app.addIgnoreFromSelection() },
-      { id: 'ignoreList', titleKey: 'cmd.ignoreList', keywords: ['ignore', 'list', 'manage'], group: 'ignore', icon: SlidersHorizontal, run: () => app.openModal('ignoreList') },
-      { id: 'savePreset', titleKey: 'cmd.savePreset', keywords: ['preset', 'save'], group: 'preset', icon: Save, run: () => app.openModal('savePreset') },
-      { id: 'managePresets', titleKey: 'cmd.managePresets', keywords: ['preset', 'manage', 'rename', 'delete'], group: 'preset', icon: SlidersHorizontal, run: () => app.openModal('managePresets') },
-      { id: 'themeLight', titleKey: 'cmd.themeLight', keywords: ['theme', 'light'], group: 'appearance', icon: Sun, active: () => theme.value === 'light', run: () => setTheme('light') },
-      { id: 'themeDark', titleKey: 'cmd.themeDark', keywords: ['theme', 'dark'], group: 'appearance', icon: Moon, active: () => theme.value === 'dark', run: () => setTheme('dark') },
-      { id: 'themeSystem', titleKey: 'cmd.themeSystem', keywords: ['theme', 'system'], group: 'appearance', icon: Monitor, active: () => theme.value === 'system', run: () => setTheme('system') },
-      { id: 'langZh', titleKey: 'cmd.langZh', keywords: ['language', 'zh', '中文', 'chs'], group: 'appearance', icon: Languages, active: () => getLocale() === 'zh', run: () => setLocale('zh') },
-      { id: 'langEn', titleKey: 'cmd.langEn', keywords: ['language', 'en', 'english'], group: 'appearance', icon: Languages, active: () => getLocale() === 'en', run: () => setLocale('en') },
-      { id: 'settings', titleKey: 'cmd.settings', keywords: ['settings', 'options', 'preferences'], group: 'app', icon: Settings, run: () => app.openModal('settings') }
+      { id: 'undo', titleKey: 'cmd.undo', keywords: ['undo', 'history'], group: 'edit', icon: Undo2, shortcut: 'Ctrl+Z', run: () => useAppStore.getState().undo() },
+      { id: 'redo', titleKey: 'cmd.redo', keywords: ['redo', 'history'], group: 'edit', icon: Redo2, shortcut: 'Ctrl+Y', run: () => useAppStore.getState().redo() },
+      chunkModeCommand('token', ScanText, chunkMode),
+      chunkModeCommand('sentence', Quote, chunkMode),
+      chunkModeCommand('paragraph', AlignLeft, chunkMode),
+      windowCommand('winDown', 'shiftDown', 'cmd.windowShiftDown', ChevronDown, chunkMode === 'token'),
+      windowCommand('winUp', 'shiftUp', 'cmd.windowShiftUp', ChevronUp, chunkMode === 'token'),
+      windowCommand('winTop', 'toTop', 'cmd.windowTop', ArrowUpToLine, chunkMode === 'token'),
+      windowCommand('winAll', 'toAll', 'cmd.windowAll', Maximize, chunkMode === 'token'),
+      { id: 'ignoreSelection', titleKey: 'cmd.ignoreSelection', keywords: ['ignore', 'selection', 'exclude'], group: 'ignore', icon: Ban, run: () => useAppStore.getState().addIgnoreFromSelection() },
+      { id: 'ignoreList', titleKey: 'cmd.ignoreList', keywords: ['ignore', 'list', 'manage'], group: 'ignore', icon: SlidersHorizontal, run: () => useAppStore.getState().openModal('ignoreList') },
+      { id: 'savePreset', titleKey: 'cmd.savePreset', keywords: ['preset', 'save'], group: 'preset', icon: Save, run: () => useAppStore.getState().openModal('savePreset') },
+      { id: 'managePresets', titleKey: 'cmd.managePresets', keywords: ['preset', 'manage', 'rename', 'delete'], group: 'preset', icon: SlidersHorizontal, run: () => useAppStore.getState().openModal('managePresets') },
+      { id: 'themeLight', titleKey: 'cmd.themeLight', keywords: ['theme', 'light'], group: 'appearance', icon: Sun, active: theme === 'light', run: () => setTheme('light') },
+      { id: 'themeDark', titleKey: 'cmd.themeDark', keywords: ['theme', 'dark'], group: 'appearance', icon: Moon, active: theme === 'dark', run: () => setTheme('dark') },
+      { id: 'themeSystem', titleKey: 'cmd.themeSystem', keywords: ['theme', 'system'], group: 'appearance', icon: Monitor, active: theme === 'system', run: () => setTheme('system') },
+      { id: 'langZh', titleKey: 'cmd.langZh', keywords: ['language', 'zh', '中文', 'chs'], group: 'appearance', icon: Languages, active: locale === 'zh', run: () => setLocale('zh') },
+      { id: 'langEn', titleKey: 'cmd.langEn', keywords: ['language', 'en', 'english'], group: 'appearance', icon: Languages, active: locale === 'en', run: () => setLocale('en') },
+      { id: 'settings', titleKey: 'cmd.settings', keywords: ['settings', 'options', 'preferences'], group: 'app', icon: Settings, run: () => useAppStore.getState().openModal('settings') }
     ]
 
     const presetCommands: CommandDef[] = Object.keys(presets).map((name) => ({
@@ -171,14 +154,13 @@ export function useCommands(): { groups: typeof COMMAND_GROUPS; commands: Comput
       group: 'preset',
       icon: Palette,
       run: () => {
-        applyPreset(presets[name])
-        settingsChanged()
+        useSettingsStore.getState().applyPreset(presets[name])
         toast(globalT('toast.loadedPreset', { name }))
       }
     }))
 
     return [...base, ...presetCommands]
-  })
+  }, [chunkMode, autoRefresh, inFlight, theme, locale, presets])
 
   return { groups: COMMAND_GROUPS, commands }
 }

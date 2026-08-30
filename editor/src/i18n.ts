@@ -1,13 +1,10 @@
-// ---------- Vue i18n setup (composition mode only) ----------
-// Typing: MessageSchema derives from the zh resource; the English resource must
-// cover every zh key (checked at compile time via _enSchemaCheck) and the exported
-// helpers constrain keys to MessageKey, so a missing/typo'd key fails type-checking.
-// (The `declare module 'vue-i18n'` augmentation is avoided; it shadows the real
-// module under this tsconfig, and vue-i18n's Locales type parameter would pin the
-// `locale` ref to a literal union that mismatches our two supported values.)
-import { createI18n, useI18n as useVueI18n } from 'vue-i18n'
-import { watch } from 'vue'
-import type { Ref } from 'vue'
+// ---------- Typed i18n (framework-free core + React hook) ----------
+// The message schema derives from the zh resource; the English resource must
+// cover every zh key (checked at compile time via _enSchemaCheck) and the
+// exported helpers constrain keys to MessageKey, so a missing/typo'd key fails
+// type-checking. `t()` stays a plain function so the CodeMirror layer can use
+// it; `useI18n()` binds the current locale reactively via useSyncExternalStore.
+import { useSyncExternalStore } from 'react'
 import zh from './locales/zh.json'
 import en from './locales/en.json'
 
@@ -20,8 +17,15 @@ export type MessageSchema = typeof zh
 /** Any valid translation key. */
 export type MessageKey = keyof MessageSchema
 
+type Messages = Record<MessageKey, string>
+
 // Compile-time guard: the English resource must cover every zh key.
-const _enSchemaCheck: Record<MessageKey, string> = en
+const _enSchemaCheck: Messages = en as Messages
+
+const messages: Record<SupportedLocale, Messages> = {
+  zh: zh as Messages,
+  en: en as Messages
+}
 
 const LS_LOCALE = 'ppl-editor.locale.v1'
 const PREFERRED_ORDER: Array<{ test: RegExp; locale: SupportedLocale }> = [
@@ -50,50 +54,67 @@ function detectLocale(): SupportedLocale {
   return DEFAULT_LOCALE
 }
 
-export const i18n = createI18n({
-  legacy: false,
-  locale: detectLocale(),
-  fallbackLocale: DEFAULT_LOCALE,
-  messages: { zh, en },
-  missingWarn: false,
-  fallbackWarn: false
-})
+// ---------- Locale state + subscription ----------
+type LocaleListener = () => void
+const listeners = new Set<LocaleListener>()
 
-const { global } = i18n
+let locale: SupportedLocale = detectLocale()
 
-type TranslateParams = Record<string, string | number>
-
-/** Typed translation helper for non-component code (CodeMirror editor layer). */
-export function t(key: MessageKey, params?: TranslateParams): string {
-  return params ? global.t(key, params) : global.t(key)
+export function getLocale(): SupportedLocale {
+  return locale
 }
 
-/** Typed composition hook for components; returns a locale-reactive `t` and the locale ref. */
-export function useI18n(): {
-  t: (key: MessageKey, params?: TranslateParams) => string
-  locale: Ref<string>
-} {
-  const { t: rawT, locale } = useVueI18n()
-  return {
-    t: (key, params) => (params ? rawT(key, params) : rawT(key)),
-    locale: locale as Ref<string>
+export function subscribeLocale(listener: LocaleListener): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
   }
 }
 
-/** Apply locale side effects and keep them in sync on switch: persistence, <html lang>, <title>. */
+function notifyLocale(): void {
+  for (const fn of listeners) fn()
+}
+
+function applyDocumentLocale(): void {
+  document.documentElement.lang = locale
+  document.title = t('app.title')
+}
+
+export function setLocale(next: SupportedLocale): void {
+  if (next === locale) return
+  locale = next
+  try {
+    localStorage.setItem(LS_LOCALE, next)
+  } catch {
+    // Storage unavailable: the choice is session-only.
+  }
+  applyDocumentLocale()
+  notifyLocale()
+}
+
+type TranslateParams = Record<string, string | number>
+const INTERP = /\{(\w+)\}/g
+
+/** Typed translation helper for any code (plain function; locale-fixed per call). */
+export function t(key: MessageKey, params?: TranslateParams): string {
+  const template = (messages[locale] ?? messages[DEFAULT_LOCALE])[key] ?? key
+  if (!params) return template
+  return template.replace(INTERP, (_, name: string) => String(params[name] ?? ''))
+}
+
+/** Typed React hook: re-renders when the locale changes. */
+export function useI18n(): {
+  t: (key: MessageKey, params?: TranslateParams) => string
+  locale: SupportedLocale
+} {
+  const current = useSyncExternalStore(subscribeLocale, getLocale)
+  return {
+    t: (key, params) => t(key, params),
+    locale: current
+  }
+}
+
+/** Apply locale side effects once at startup: <html lang>, <title>. */
 export function initI18nSideEffects(): void {
-  document.documentElement.lang = global.locale.value
-  document.title = global.t('app.title')
-  watch(
-    () => global.locale.value,
-    (locale) => {
-      try {
-        localStorage.setItem(LS_LOCALE, locale)
-      } catch {
-        // Storage unavailable: the choice is session-only.
-      }
-      document.documentElement.lang = locale
-      document.title = global.t('app.title')
-    }
-  )
+  applyDocumentLocale()
 }

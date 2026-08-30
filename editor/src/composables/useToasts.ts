@@ -1,8 +1,8 @@
 // ---------- Toast bridge ----------
 // Preserves the app-wide `toast(msg, type)` contract while rendering through
-// vue-sonner (the shadcn-vue toast stack). The single <Sonner /> mount in App.vue
+// sonner (the shadcn/ui toast stack). The single <Toaster /> mount in App.tsx
 // does the actual rendering; this module only forwards the call.
-import { toast as sonnerToast } from 'vue-sonner'
+import { toast as sonnerToast } from 'sonner'
 
 export type ToastType = 'info' | 'warn' | 'error'
 

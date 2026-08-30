@@ -1,8 +1,8 @@
-// ---------- Theme controller ----------
+// ---------- Theme controller (framework-free + React hook) ----------
 // Single source of truth for light / dark / system appearance. Applied as the
 // `.dark` class on <html> and consumed by the header toggle, the command palette
 // and the Toaster. Persisted to localStorage.
-import { computed, ref, watch } from 'vue'
+import { useSyncExternalStore } from 'react'
 
 export type Theme = 'light' | 'dark' | 'system'
 
@@ -20,44 +20,69 @@ function readStored(): Theme {
   return 'system'
 }
 
-const theme = ref<Theme>(readStored())
+let theme: Theme = readStored()
 
 /** The concrete color scheme currently in effect (system resolved to light/dark). */
-const resolved = computed<'light' | 'dark'>(() =>
-  theme.value === 'system' ? (mq?.matches ? 'dark' : 'light') : theme.value
-)
+export function getResolvedTheme(): 'light' | 'dark' {
+  return theme === 'system' ? (mq?.matches ? 'dark' : 'light') : theme
+}
 
 function apply(): void {
-  document.documentElement.classList.toggle('dark', resolved.value === 'dark')
+  document.documentElement.classList.toggle('dark', getResolvedTheme() === 'dark')
+}
+
+// ---------- Subscription (consumed by useSyncExternalStore) ----------
+type ThemeListener = () => void
+const listeners = new Set<ThemeListener>()
+
+export function getTheme(): Theme {
+  return theme
+}
+
+export function subscribeTheme(listener: ThemeListener): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function notifyTheme(): void {
+  for (const fn of listeners) fn()
+}
+
+export function setTheme(t: Theme): void {
+  theme = t
+  try {
+    localStorage.setItem(LS_THEME, t)
+  } catch {
+    // Storage unavailable: the choice is session-only.
+  }
+  apply()
+  notifyTheme()
+}
+
+/** Light -> dark -> system -> light loop (used by the header toggle). */
+export function cycleTheme(): void {
+  const order: Theme[] = ['light', 'dark', 'system']
+  setTheme(order[(order.indexOf(theme) + 1) % order.length])
 }
 
 apply()
-watch(resolved, apply)
 mq?.addEventListener('change', () => {
-  if (theme.value === 'system') apply()
+  if (theme === 'system') {
+    apply()
+    notifyTheme()
+  }
 })
 
+/** React hook: re-renders when the effective theme changes. */
 export function useTheme(): {
-  theme: typeof theme
-  resolved: typeof resolved
+  theme: Theme
+  resolved: 'light' | 'dark'
   setTheme: (t: Theme) => void
   cycle: () => void
 } {
-  /** Persist and apply a theme choice. */
-  function setTheme(t: Theme): void {
-    theme.value = t
-    try {
-      localStorage.setItem(LS_THEME, t)
-    } catch {
-      // Storage unavailable: the choice is session-only.
-    }
-  }
-
-  /** Light -> dark -> system -> light loop (used by the header toggle). */
-  function cycle(): void {
-    const order: Theme[] = ['light', 'dark', 'system']
-    setTheme(order[(order.indexOf(theme.value) + 1) % order.length])
-  }
-
-  return { theme, resolved, setTheme, cycle }
+  const current = useSyncExternalStore(subscribeTheme, getTheme)
+  const resolved = useSyncExternalStore(subscribeTheme, getResolvedTheme)
+  return { theme: current, resolved, setTheme, cycle: cycleTheme }
 }

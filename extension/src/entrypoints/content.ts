@@ -4,8 +4,10 @@
 //   - unit measurement (merge short blocks, split on sentence boundaries)
 //   - OOM half-retry on a 500
 // New: explicit measure state machine (core/state.ts), profile-bound color
-// scales, fully inline annotation styles (zero CSS injection) and typed
-// messages to the background (page CORS bypass + schema-validated responses).
+// scales, fully inline annotation styles (zero CSS injection), typed messages
+// to the background (page CORS bypass + schema-validated responses) and a
+// ShadowRoot floating UI for block details (S6).
+import '../assets/content-ui.css'
 import {
   BUILTIN_PROFILES,
   computeStats,
@@ -17,14 +19,23 @@ import {
   isTerminal,
   type MeasureState,
   type TokenDetail,
-  type ColorStop
+  type ColorStop,
 } from '@opengptdetect/core'
 import { getSettings, settingsItem, type ExtensionSettings } from '../lib/settings.ts'
 import { send } from '../lib/messaging.ts'
-import { scan, groupUnits, setState, getState, getFlatText, type MeasurementUnit } from '../lib/dom-scan.ts'
+import {
+  scan,
+  groupUnits,
+  setState,
+  getState,
+  getFlatText,
+  type MeasurementUnit,
+} from '../lib/dom-scan.ts'
 import { createObserver, pickInitial, startMutationWatch } from '../lib/viewport.ts'
 import * as annotate from '../lib/annotate.ts'
 import { renderBlock } from '../lib/heatmap.ts'
+import { mountFloatingUi, type FloatingUi } from '../lib/floating.tsx'
+import type { AiVerdict, BlockDetailInput } from '../components/block-detail.tsx'
 
 /** Stops for a detected class; falls back to the built-in zh/en defaults. */
 function stopsFor(lang: 'zh' | 'en', profiles: ExtensionSettings['profiles']): ColorStop[] {
@@ -32,13 +43,24 @@ function stopsFor(lang: 'zh' | 'en', profiles: ExtensionSettings['profiles']): C
   return (profile ?? BUILTIN_PROFILES[lang === 'zh' ? 0 : 1]!).scale.stops
 }
 
+interface Measured {
+  tokens: TokenDetail[]
+  avgPpl: number | null
+  avgNll: number | null
+  charCount: number
+  lang: 'zh' | 'en'
+  error: string | null
+}
+
 interface UnitRecord {
   state: MeasureState
   unit: MeasurementUnit
+  measured: Measured | null
 }
 
 export default defineContentScript({
   matches: ['<all_urls>'],
+  cssInjectionMode: 'ui',
   main(ctx) {
     let settings: ExtensionSettings | null = null
     let enabled = false
@@ -46,8 +68,9 @@ export default defineContentScript({
     let io: IntersectionObserver | null = null
     let mo: MutationObserver | null = null
     let unwatch: (() => void) | null = null
+    let floating: FloatingUi | null = null
 
-    const queue: UnitRecord[] = []
+    const queue: { state: MeasureState; unit: MeasurementUnit }[] = []
     let inFlight = 0
     /** First-block element -> unit + state machine record. */
     const records = new Map<Element, UnitRecord>()
@@ -97,7 +120,10 @@ export default defineContentScript({
     }
 
     function unitWords(u: MeasurementUnit): number {
-      const words = u.blocks.reduce((s, b) => (b.text.match(/\S+/g) ? b.text.match(/\S+/g)!.length : 0), 0)
+      const words = u.blocks.reduce(
+        (s, b) => (b.text.match(/\S+/g) ? b.text.match(/\S+/g)!.length : 0),
+        0,
+      )
       return words
     }
 
@@ -107,7 +133,7 @@ export default defineContentScript({
       if (state === 'done' || state === 'measuring') return
       const rec = records.get(first)
       if (rec && isTerminal(rec.state)) return
-      if (!rec) records.set(first, { state: INITIAL_MEASURE_STATE, unit: u })
+      if (!rec) records.set(first, { state: INITIAL_MEASURE_STATE, unit: u, measured: null })
       queue.push({ state: rec?.state ?? INITIAL_MEASURE_STATE, unit: u })
       pump()
     }
@@ -126,15 +152,6 @@ export default defineContentScript({
     }
 
     // ----- measure one unit (chunk -> api -> merge -> paint) -----
-    interface Measured {
-      tokens: TokenDetail[]
-      avgPpl: number | null
-      avgNll: number | null
-      charCount: number
-      lang: 'zh' | 'en'
-      error: string | null
-    }
-
     async function fetchChunk(base: number, text: string, partial?: boolean): Promise<Measured> {
       const resp = await send('ppl', { baseUrl: settings!.apiBaseUrl, text })
       if (!resp.ok) {
@@ -145,7 +162,14 @@ export default defineContentScript({
           const right = await fetchChunk(base, text.slice(half), true)
           return mergeMeasured(left, right, text.length)
         }
-        return { tokens: [], avgPpl: null, avgNll: null, charCount: text.length, lang: 'zh', error: resp.error ?? 'failed' }
+        return {
+          tokens: [],
+          avgPpl: null,
+          avgNll: null,
+          charCount: text.length,
+          lang: 'zh',
+          error: resp.error ?? 'failed',
+        }
       }
       const tokens = offsetTokens(resp.data.token_details, base)
       const stats = computeStats(tokens)
@@ -155,7 +179,7 @@ export default defineContentScript({
         avgNll: stats.avgNll,
         charCount: text.length,
         lang: 'zh',
-        error: null
+        error: null,
       }
     }
 
@@ -168,7 +192,7 @@ export default defineContentScript({
         avgNll: stats.avgNll,
         charCount,
         lang: a.lang,
-        error: a.error ?? b.error ?? null
+        error: a.error ?? b.error ?? null,
       }
     }
 
@@ -181,10 +205,22 @@ export default defineContentScript({
         const part = await fetchChunk(chunk.start, chunk.text)
         acc = acc ? mergeMeasured(acc, part, text.length) : { ...part, lang }
       }
-      return acc ?? { tokens: [], avgPpl: null, avgNll: null, charCount: text.length, lang, error: 'empty' }
+      return (
+        acc ?? {
+          tokens: [],
+          avgPpl: null,
+          avgNll: null,
+          charCount: text.length,
+          lang,
+          error: 'empty',
+        }
+      )
     }
 
-    async function measureAndRender(rec: UnitRecord): Promise<void> {
+    async function measureAndRender(rec: {
+      state: MeasureState
+      unit: MeasurementUnit
+    }): Promise<void> {
       const unit = rec.unit
       rec.state = transition(rec.state, { type: 'start' })
       for (const b of unit.blocks) {
@@ -205,9 +241,17 @@ export default defineContentScript({
             ppl: t.ppl,
             text: t.token_text,
             char_start: t.char_start ?? 0,
-            char_end: t.char_end ?? 0
+            char_end: t.char_end ?? 0,
           }))
-          renderBlock(b.el, flat, tokens, offset, len, settings!, stopsFor(m.lang, settings!.profiles))
+          renderBlock(
+            b.el,
+            flat,
+            tokens,
+            offset,
+            len,
+            settings!,
+            stopsFor(m.lang, settings!.profiles),
+          )
         } catch {
           // a DOM hiccup must not kill the queue
         }
@@ -225,6 +269,9 @@ export default defineContentScript({
           rec.state = transition(rec.state, { type: 'result', avgPpl: m.avgPpl })
         }
       }
+      // Persist the outcome for the floating detail UI (same record the map holds).
+      const firstRec = records.get(unit.blocks[0]!.el)
+      if (firstRec) firstRec.measured = m
     }
 
     function isAI(m: Measured): boolean {
@@ -239,6 +286,62 @@ export default defineContentScript({
       return m.avgPpl < thr
     }
 
+    // ----- floating block detail UI (S6) -----
+    function guidelineFor(
+      lang: 'zh' | 'en',
+    ): { aiLikePplMax: number; humanLikePplMin: number } | undefined {
+      const profile = BUILTIN_PROFILES.find((p) => p.id === settings!.profiles[lang])
+      return profile?.guideline
+    }
+
+    function verdictFor(m: Measured): AiVerdict {
+      if (m.error || m.avgPpl == null || !settings!.aiDetectEnabled) return 'unknown'
+      const g = guidelineFor(m.lang)
+      if (!g) return 'unknown'
+      if (m.avgPpl < g.aiLikePplMax) return 'ai'
+      if (m.avgPpl >= g.humanLikePplMin) return 'human'
+      return 'uncertain'
+    }
+
+    function blockDetailFrom(rec: UnitRecord): BlockDetailInput | null {
+      const m = rec.measured
+      if (!m) return null
+      const profile = BUILTIN_PROFILES.find((p) => p.id === settings!.profiles[m.lang])
+      return {
+        avgPpl: m.avgPpl,
+        avgNll: m.avgNll,
+        charCount: m.charCount,
+        tokenCount: m.tokens.length,
+        lang: m.lang,
+        profileId: profile?.id ?? (m.lang === 'en' ? 'en-default-2026' : 'zh-default-2026'),
+        verdict: verdictFor(m),
+        error: m.error,
+        onRemeasure: () => remeasureBlock(rec),
+      }
+    }
+
+    function remeasureBlock(rec: UnitRecord): void {
+      floating?.close()
+      rec.measured = null
+      for (const b of rec.unit.blocks) setState(b.el, 'pending')
+      enqueueUnit(rec.unit)
+    }
+
+    /** One document-wide click handler: open/close the floating detail popover. */
+    function onDocumentClick(e: MouseEvent): void {
+      if (!floating || !enabled || !isAllowed()) return
+      const label = (e.target as Element | null)?.closest?.('.' + annotate.LABEL_CLASS)
+      if (!label) {
+        floating.close()
+        return
+      }
+      const block = label.parentElement
+      if (!block) return
+      const rec = records.get(block)
+      const detail = rec ? blockDetailFrom(rec) : null
+      if (detail) floating.open(block, detail)
+    }
+
     // ----- lifecycle -----
     function start(): void {
       if (started) return
@@ -251,13 +354,13 @@ export default defineContentScript({
       const units = groupUnits(candidates, settings!)
       const initial = pickInitial(
         units.map((u) => ({ words: unitWords(u), unit: u })),
-        settings!.initialMeasureWords
+        settings!.initialMeasureWords,
       )
       const initialSet = new Set(initial.map((x) => x.unit))
       for (const u of units) {
         const first = u.blocks[0]!.el
         if (records.has(first)) continue
-        records.set(first, { state: INITIAL_MEASURE_STATE, unit: u })
+        records.set(first, { state: INITIAL_MEASURE_STATE, unit: u, measured: null })
         setState(first, 'pending')
         io.observe(first)
         if (initialSet.has(u)) enqueueUnit(u)
@@ -268,7 +371,7 @@ export default defineContentScript({
         for (const u of groupUnits(cands, settings!)) {
           const first = u.blocks[0]!.el
           if (records.has(first)) continue
-          records.set(first, { state: INITIAL_MEASURE_STATE, unit: u })
+          records.set(first, { state: INITIAL_MEASURE_STATE, unit: u, measured: null })
           setState(first, 'pending')
           io?.observe(first)
           enqueueUnit(u)
@@ -287,6 +390,11 @@ export default defineContentScript({
     // ----- wiring -----
     void (async () => {
       settings = await getSettings()
+      floating = await mountFloatingUi(ctx).catch((err) => {
+        // The annotation pipeline must survive a floating-UI failure.
+        console.warn('[ppl] floating UI mount failed', err)
+        return null
+      })
       unwatch = settingsItem.watch((s) => {
         settings = s ?? settings
         if (settings) applyEnabled(settings.enabled)
@@ -294,6 +402,8 @@ export default defineContentScript({
       if (!isAllowed()) return
       applyEnabled(settings.enabled)
     })()
+
+    document.addEventListener('click', onDocumentClick)
 
     browser.runtime.onMessage.addListener((msg: unknown) => {
       if (!msg || typeof msg !== 'object') return
@@ -306,6 +416,9 @@ export default defineContentScript({
     ctx.addEventListener(window, 'pagehide', () => {
       stop()
       unwatch?.()
+      document.removeEventListener('click', onDocumentClick)
+      floating?.remove()
+      floating = null
     })
-  }
+  },
 })

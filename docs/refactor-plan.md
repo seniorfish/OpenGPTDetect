@@ -26,17 +26,17 @@ root package.json   (workspaces: ["packages/*", "editor", "extension"])
 
 ## 2. `packages/core` 清单
 
-| 模块 | 内容 | 来源 |
-|---|---|---|
-| `schemas.ts` | Zod: `PplResponse`/`TokenDetail`/`HealthResponse` | editor 迁入 |
-| `api.ts` | `createApi(transport, serverUrl)`;Transport 抽象(直连 fetch / 经 background 消息) | editor 改造 |
-| `color.ts` | `colorForPpl` + hex/rgb 工具 | editor + heatmap 两份合并 |
-| `smooth.ts` | `smoothTokens`(token 窗口 / 句均) | heatmap 迁入 |
-| `measure.ts` | `detectLang`/`splitChunks`/`mergeChunkResults` | api-client 纯函数化 |
-| `scale.ts` | `PplScaleProfile` Zod schema + 导入/导出/校验 + 内置 zh/en 官方 profile | 新写 |
-| `errors.ts` | `ErrorCode` 枚举 + `AppError` | 新写 |
-| `state.ts` | 测量管线显式状态机(判别联合 + 转换函数,无库) | 新写 |
-| `messages.ts` | typed message registry(background↔content↔popup) | 新写 |
+| 模块          | 内容                                                                              | 来源                      |
+| ------------- | --------------------------------------------------------------------------------- | ------------------------- |
+| `schemas.ts`  | Zod: `PplResponse`/`TokenDetail`/`HealthResponse`                                 | editor 迁入               |
+| `api.ts`      | `createApi(transport, serverUrl)`;Transport 抽象(直连 fetch / 经 background 消息) | editor 改造               |
+| `color.ts`    | `colorForPpl` + hex/rgb 工具                                                      | editor + heatmap 两份合并 |
+| `smooth.ts`   | `smoothTokens`(token 窗口 / 句均)                                                 | heatmap 迁入              |
+| `measure.ts`  | `detectLang`/`splitChunks`/`mergeChunkResults`                                    | api-client 纯函数化       |
+| `scale.ts`    | `PplScaleProfile` Zod schema + 导入/导出/校验 + 内置 zh/en 官方 profile           | 新写                      |
+| `errors.ts`   | `ErrorCode` 枚举 + `AppError`                                                     | 新写                      |
+| `state.ts`    | 测量管线显式状态机(判别联合 + 转换函数,无库)                                      | 新写                      |
+| `messages.ts` | typed message registry(background↔content↔popup)                                  | 新写                      |
 
 ## 3. `packages/ui` 清单
 
@@ -62,7 +62,8 @@ src/entrypoints/
 ```
 
 - **A 标注层**:直接落页面 DOM,全内联样式(零 CSS 注入);禁用=遍历隐藏;状态由 `core/state.ts` 状态机持有。
-- **B 浮层**:`createShadowRootUi` + `cssInjectionMode: 'ui'` + 根容器 **`font-size: 16px`**(rem 陷阱修复);**所有 Radix portal 组件指定容器 → shadow root 内**。
+- **B 浮层**:`createShadowRootUi` + `cssInjectionMode: 'ui'`;**所有 Radix portal 组件指定容器 → shadow root 内**。
+  - rem 陷阱修法(2026-08-31 修订):原案"根容器 `font-size:16px`"经核对 **WXT 官方文档无效**——`rem` 永远相对 `<html>` 的 font-size,shadow root 容器无法覆盖。采用官方 FAQ 修法:构建期 `postcss-rem-to-responsive-pixel`(rootValue 16, propList '*', transformUnit 'px')把 Tailwind rem 固化为 px(见 §11)。
 - 消息:`core/messages.ts` 注册表;存储:`@wxt-dev/storage` `defineItem` + `version/migrations`(删 onInstalled 硬编码);凡不可信输入(storage 读出、profile 导入)过 Zod。
 
 ## 6. 统一 profile 格式(schemaVersion 1)
@@ -75,7 +76,7 @@ src/entrypoints/
   "name": "中文默认",
   "scope": "中文通用文本(zh, general text)",
   "tags": ["zh", "general"],
-  "scale": { "mode": "linear", "stops": [ { "ppl": 12, "color": "#22c55e" } ] },
+  "scale": { "mode": "linear", "stops": [{ "ppl": 12, "color": "#22c55e" }] },
   "guideline": { "aiLikePplMax": 18, "humanLikePplMin": 35, "hardPplMin": 50 }
 }
 ```
@@ -84,10 +85,10 @@ src/entrypoints/
 - **数据与绑定解耦**:profile 是纯数据;应用侧设置维护"检测类别 → profile id"绑定。默认绑定内置 zh/en。
 - 内置官方 profile(editor 4 锚点曲线 + extension 经验注释;旧扩展默认视觉略有收敛差异,属升级):
 
-| id | stops | guideline (aiLike/humanLike/hard) |
-|---|---|---|
-| `zh-default-2026` | 12→`#22c55e`, 18→`#eab308`, 50→`#ef4444`, 100→`#7f1d1d` | 18 / 35 / 50 |
-| `en-default-2026` | 4→`#22c55e`, 6→`#eab308`, 16.67→`#ef4444`, 33.33→`#7f1d1d` | 6 / 18 / 25 |
+| id                | stops                                                      | guideline (aiLike/humanLike/hard) |
+| ----------------- | ---------------------------------------------------------- | --------------------------------- |
+| `zh-default-2026` | 12→`#22c55e`, 18→`#eab308`, 50→`#ef4444`, 100→`#7f1d1d`    | 18 / 35 / 50                      |
+| `en-default-2026` | 4→`#22c55e`, 6→`#eab308`, 16.67→`#ef4444`, 33.33→`#7f1d1d` | 6 / 18 / 25                       |
 
 - TS 侧 Zod 单一来源;`z.toJSONSchema()` 产出 `docs/schemas/`;Python 端 `jsonschema` 验同一份。
 
@@ -99,12 +100,12 @@ src/entrypoints/
 
 ## 8. 测试面
 
-| 层 | 工具 | 对象 |
-|---|---|---|
-| core | vitest 单测 + golden | color/smooth/measure/scale/state/errors/messages |
-| editor | 现有 vitest + puppeteer e2e(保持绿) | 业务层 |
-| extension | WxtVitest + fakeBrowser(+jsdom) | 消息路由、storage 迁移、状态机、content 编排 |
-| 跨语言 | python jsonschema + golden 对拍 | profile + 算法 |
+| 层        | 工具                                | 对象                                             |
+| --------- | ----------------------------------- | ------------------------------------------------ |
+| core      | vitest 单测 + golden                | color/smooth/measure/scale/state/errors/messages |
+| editor    | 现有 vitest + puppeteer e2e(保持绿) | 业务层                                           |
+| extension | WxtVitest + fakeBrowser(+jsdom)     | 消息路由、storage 迁移、状态机、content 编排     |
+| 跨语言    | python jsonschema + golden 对拍     | profile + 算法                                   |
 
 ## 9. 已并入的代码范式(本次引入)
 
@@ -120,18 +121,18 @@ src/entrypoints/
 
 置信度:🟢高 / 🟡中 / 🔴低。通用规则:写码前必读 D:\references 对应文档;不确定的 API 先查后写,不许瞎写。
 
-| 步 | 内容 | 置信 | 验证(结束标志) | D:\references 计划 |
-|---|---|---|---|---|
-| **S0 工程基线** ✅ | root workspaces + prettier/eslint flat + 根 .gitignore 增补;`npm install` 全量 | 🟢 | `npm run typecheck -w editor` 绿;无 ERESOLVE;root lock 生成 | 无 |
-| **S1 packages/core** ✅ | 迁 schemas/api/color/smooth + 新写 measure/errors/state/messages/scale(内置 profile);单测迁入;`z.toJSONSchema` | 🟡(Zod4 JSON Schema 新面) | core 全量 vitest 绿 + golden v1 通过 | **zod/04** 必读；01/02/03 按需 |
-| **S2 editor 切 core** ✅ | import 改名;删本地副本 | 🟢 | editor `npm test` + e2e(需 mock server)绿 | — |
-| **S3 packages/ui + editor 切换** ✅ | 原语迁移;ColorStopsEditor 受控化;style.css 加 `@source` | 🟡(@source 为实测点) | editor 全绿 + design-screenshot 视觉回归 | **tailwindcss/02** 必读 |
-| **S4 WXT 骨架** ✅ | 手工搭 entrypoints(不跑 `wxt init`);wxt.config(module-react + tailwindcss);popup/options 最小页;root workspaces 补 `extension` | 🟡(web-ext 自动开浏览器/Windows) | `wxt build` 产出 `.output/chrome-mv3` | **WXT reference.md/react.md/config.md 精读** |
-| **S5 纯函数落 content** | dom-scan 拆分;测量管线用 core(state+errors+messages);background 消息翻新 | 🟡(DOM 行为保持敏感) | WxtVitest 行为测试绿;mock server 手动验证 | **WXT extension-apis.md 必读** |
-| **S6 浮层 UI** | createShadowRootUi + cssInjectionMode ui + `font-size:16px` + Radix portal 指回 shadow root | 🟡(Radix 文档就绪后升 🟢) | 多站点(不同 root font-size)实测:无缩放、弹窗样式完整 | **D:\references\Radix\reference.md(已到位,S6 必读;02-overlays.md 覆盖 portal container)**;WXT react.md CSS notes 复查 |
-| **S7 profile 落地** | core/scale.ts 终版 + `z.toJSONSchema` 产出;editor 导入导出;extension options+profile 库(storage migrations) | 🟡 | 双端导入→渲染一致;python jsonschema 验同文件 | zod/04 复查;WXT extension-apis.md(storage)复查 |
-| **S8 对拍与文档** | `test-fixtures/` 终版;tools/measure/verify_scales.py;`docs/ppl-scale-format.md`;更新 AGENTS/README | 🟢 | python 脚本过;S1 夹具与 python 输出全同 | 无 |
-| **S9(可后置) CI** | GitHub Actions:三包 typecheck+test+build + verify_scales;extension puppeteer e2e | 🟢 | 远端跑绿 | 无 |
+| 步                                  | 内容                                                                                                                           | 置信                             | 验证(结束标志)                                              | D:\references 计划                                                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **S0 工程基线** ✅                  | root workspaces + prettier/eslint flat + 根 .gitignore 增补;`npm install` 全量                                                 | 🟢                               | `npm run typecheck -w editor` 绿;无 ERESOLVE;root lock 生成 | 无                                                                                                                    |
+| **S1 packages/core** ✅             | 迁 schemas/api/color/smooth + 新写 measure/errors/state/messages/scale(内置 profile);单测迁入;`z.toJSONSchema`                 | 🟡(Zod4 JSON Schema 新面)        | core 全量 vitest 绿 + golden v1 通过                        | **zod/04** 必读；01/02/03 按需                                                                                        |
+| **S2 editor 切 core** ✅            | import 改名;删本地副本                                                                                                         | 🟢                               | editor `npm test` + e2e(需 mock server)绿                   | —                                                                                                                     |
+| **S3 packages/ui + editor 切换** ✅ | 原语迁移;ColorStopsEditor 受控化;style.css 加 `@source`                                                                        | 🟡(@source 为实测点)             | editor 全绿 + design-screenshot 视觉回归                    | **tailwindcss/02** 必读                                                                                               |
+| **S4 WXT 骨架** ✅                  | 手工搭 entrypoints(不跑 `wxt init`);wxt.config(module-react + tailwindcss);popup/options 最小页;root workspaces 补 `extension` | 🟡(web-ext 自动开浏览器/Windows) | `wxt build` 产出 `.output/chrome-mv3`                       | **WXT reference.md/react.md/config.md 精读**                                                                          |
+| **S5 纯函数落 content** ✅          | dom-scan 拆分;测量管线用 core(state+errors+messages);background 消息翻新                                                       | 🟡(DOM 行为保持敏感)             | WxtVitest 行为测试绿;mock server 手动验证                   | **WXT extension-apis.md 必读**                                                                                        |
+| **S6 浮层 UI** ✅                    | createShadowRootUi + cssInjectionMode ui + rem→px(postcss 插件)+ Radix portal 指回 shadow root                                 | 🟡(Radix 文档就绪后升 🟢)        | 多站点(不同 root font-size)实测:无缩放、弹窗样式完整        | **D:\references\Radix\reference.md(已到位,S6 必读;02-overlays.md 覆盖 portal container)**;WXT react.md CSS notes 复查 |
+| **S7 profile 落地**                 | core/scale.ts 终版 + `z.toJSONSchema` 产出;editor 导入导出;extension options+profile 库(storage migrations)                    | 🟡                               | 双端导入→渲染一致;python jsonschema 验同文件                | zod/04 复查;WXT extension-apis.md(storage)复查                                                                        |
+| **S8 对拍与文档**                   | `test-fixtures/` 终版;tools/measure/verify_scales.py;`docs/ppl-scale-format.md`;更新 AGENTS/README                             | 🟢                               | python 脚本过;S1 夹具与 python 输出全同                     | 无                                                                                                                    |
+| **S9(可后置) CI**                   | GitHub Actions:三包 typecheck+test+build + verify_scales;extension puppeteer e2e                                               | 🟢                               | 远端跑绿                                                    | 无                                                                                                                    |
 
 依赖:S1→S2→S3 串行;S4 可与 S1–S3 并行;S5→S6→S7 串行。
 
@@ -143,6 +144,7 @@ src/entrypoints/
 - **extension 旧默认值与新内置 profile 的视觉差异**:已定调为"收敛升级",S7 交付时在 README 说明。
 - **Chrome 151+ (branded) 已忽略自动化 `--load-extension`**:扩展 e2e 必须用 Chrome for Testing(本机: `~/.cache/puppeteer/chrome/win64-143.0.7499.40/chrome-win64/chrome.exe`);S9 CI 亦然。
 - **行为差异(零 CSS 注入原则的代价)**:加载指示的 spinner(需 keyframes)退化为静态字形 ◌/⏳;其余标注全部内联样式。loadingIndicator=spinner 与旧版视觉不同,已接受并注释。
+- **rem→px 全局副作用**:postcss-rem-to-responsive-pixel 作用于整个 extension 构建(含 popup/options):扩展 UI 不再随浏览器默认字号缩放(与官方 FAQ 建议一致,可接受)。
 
 ## 13. 会话协定(2026-08-30 增补)
 

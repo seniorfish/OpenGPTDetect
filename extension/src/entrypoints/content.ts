@@ -25,13 +25,13 @@ import { getSettings, settingsItem, type ExtensionSettings } from '../lib/settin
 import { initLocale } from '../lib/i18n.ts'
 import { send } from '../lib/messaging.ts'
 import {
-  scan,
   groupUnits,
   setState,
   getState,
   getFlatText,
   type MeasurementUnit,
 } from '../lib/dom-scan.ts'
+import { extractBlocks } from '../lib/adapters.ts'
 import { createObserver, pickInitial, startMutationWatch } from '../lib/viewport.ts'
 import * as annotate from '../lib/annotate.ts'
 import { renderBlock } from '../lib/heatmap.ts'
@@ -356,7 +356,7 @@ export default defineContentScript({
         const rec = records.get(el)
         if (rec) enqueueUnit(rec.unit)
       })
-      const candidates = scan(document.body, settings!)
+      const candidates = extractBlocks(document.body, settings!)
       const units = groupUnits(candidates, settings!)
       const initial = pickInitial(
         units.map((u) => ({ words: unitWords(u), unit: u })),
@@ -372,7 +372,7 @@ export default defineContentScript({
         if (initialSet.has(u)) enqueueUnit(u)
       }
       mo = startMutationWatch(() => {
-        const cands = scan(document.body, settings!)
+        const cands = extractBlocks(document.body, settings!)
         if (!cands.length) return
         for (const u of groupUnits(cands, settings!)) {
           const first = u.blocks[0]!.el

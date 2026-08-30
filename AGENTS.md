@@ -18,7 +18,8 @@
 - `packages/ui` — `@opengptdetect/ui`: shadcn primitives + shared controlled
   components (ColorStopsEditor, ProfileDialog); hosts provide design tokens.
 - `editor/..` — Vite + React + CodeMirror 6 frontend (Zustand + shadcn/ui + Zod at the API boundary), built to a single HTML; see `editor/AGENTS.md` for the adopted stack and rules.
-- `extension/..` — WXT + React Chrome MV3 extension turning page text into PPL heatmaps.
+- `extension/..` — WXT + React Chrome MV3 extension turning page text into PPL heatmaps;
+  per-site block extraction lives behind `src/lib/adapters.ts` (design: `docs/extension-site-adapters.md`).
 - `test-fixtures/` — cross-language golden fixture (`ppl-color.golden.json`), read by
   the TS vitest suite AND Python (`tools/measure/verify_scales.py`).
 - `docs/ppl-scale-format.md` (+ `docs/schemas/ppl-scale-v1.schema.json`) — profile

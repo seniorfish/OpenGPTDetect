@@ -118,6 +118,70 @@ check(
   !!card1 && !!card2 && Math.abs(card2.width - card1.width) < 1,
 )
 
+// ---------- Options page: sidebar nav + i18n ----------
+const extId = await (async () => {
+  const svc = (await browser.targets()).find(
+    (t) => t.type() === 'service_worker' && t.url().includes('chrome-extension://'),
+  )
+  return svc?.url().match(/chrome-extension:\/\/([^/]+)/)?.[1]
+})()
+check('extension id discoverable', !!extId)
+
+const optionsPage = await browser.newPage()
+await optionsPage.goto(`chrome-extension://${extId}/options.html`, { waitUntil: 'networkidle0' })
+const navCount = await optionsPage.evaluate(
+  () => document.querySelectorAll('aside nav button').length,
+)
+check('options page has 7 sidebar entries', navCount === 7)
+
+// Click the "文本提取" nav item; the page heading must switch accordingly.
+const clickNav = (label) =>
+  optionsPage.evaluate((l) => {
+    const b = [...document.querySelectorAll('aside nav button')].find((x) =>
+      x.textContent.includes(l),
+    )
+    b?.click()
+  }, label)
+
+await clickNav('文本提取')
+await optionsPage.waitForFunction(
+  () =>
+    !!document.querySelector('h2') && document.querySelector('h2').textContent.includes('文本提取'),
+  { timeout: 5000 },
+)
+check('sidebar navigation switches pages', true)
+check(
+  'options labels are localized (zh)',
+  await optionsPage.evaluate(() => document.body.textContent.includes('文本块模式')),
+)
+
+// Back to General, switch the language to English and check the page re-renders.
+await clickNav('通用')
+await optionsPage.waitForFunction(
+  () => !!document.querySelector('h2') && document.querySelector('h2').textContent.includes('通用'),
+  { timeout: 5000 },
+)
+await optionsPage.evaluate(() => {
+  ;[...document.querySelectorAll('[data-slot="select-trigger"]')]
+    .find((t) => t.textContent.includes('自动检测'))
+    ?.click()
+})
+await optionsPage.waitForSelector('[data-slot="select-item"]', { timeout: 5000 })
+await optionsPage.evaluate(() => {
+  ;[...document.querySelectorAll('[data-slot="select-item"]')]
+    .find((i) => i.textContent.trim() === 'English')
+    ?.click()
+})
+await optionsPage.waitForFunction(
+  () => {
+    const nav = [...document.querySelectorAll('aside nav button')]
+    return nav.some((b) => b.textContent.includes('Text extraction'))
+  },
+  { timeout: 5000 },
+)
+check('language switch re-renders the page in place (en)', true)
+await optionsPage.close()
+
 await browser.close()
 
 if (failures.length) {

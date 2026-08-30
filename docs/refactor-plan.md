@@ -141,6 +141,8 @@ src/entrypoints/
 - **editor/package-lock.json**:workspaces 后由 root lock 统一替代;如被自动更新/废弃,删除并由根 lock 接管(单一 lock)。
 - **工作树已有未提交修改**(editor/src 5 个文件):S0–S3 绝不触碰;若某步必须改,先与用户确认。
 - **extension 旧默认值与新内置 profile 的视觉差异**:已定调为"收敛升级",S7 交付时在 README 说明。
+- **Chrome 151+ (branded) 已忽略自动化 `--load-extension`**:扩展 e2e 必须用 Chrome for Testing(本机: `~/.cache/puppeteer/chrome/win64-143.0.7499.40/chrome-win64/chrome.exe`);S9 CI 亦然。
+- **行为差异(零 CSS 注入原则的代价)**:加载指示的 spinner(需 keyframes)退化为静态字形 ◌/⏳;其余标注全部内联样式。loadingIndicator=spinner 与旧版视觉不同,已接受并注释。
 
 ## 13. 会话协定(2026-08-30 增补)
 

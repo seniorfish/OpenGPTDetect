@@ -8,8 +8,8 @@ import { useAppStore } from '@/stores/app.ts'
 import { useSettingsStore } from '@/stores/settings.ts'
 import { colorForPpl, fmtNum } from '@/util.ts'
 import { useDocMetrics } from '@/hooks/useDocMetrics.ts'
-import { Separator } from '@/components/ui/separator'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Separator } from '@opengptdetect/ui'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@opengptdetect/ui'
 
 export function StatusBar() {
   const { t } = useI18n()

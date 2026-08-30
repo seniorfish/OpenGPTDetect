@@ -6,18 +6,19 @@
 // fires the matching refresh (editor decoration / fonts / health probe), so no
 // per-field commit hook is needed anymore.
 import { useI18n, type MessageKey } from '@/i18n.ts'
+import { toast } from '@/composables/useToasts.ts'
 import { useSettingsStore } from '@/stores/settings.ts'
 import { useAppStore } from '@/stores/app.ts'
 import { clamp } from '@/util.ts'
 import type { HeatStyle } from '@/types.ts'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
-import { Slider } from '@/components/ui/slider'
-import { Separator } from '@/components/ui/separator'
-import { ColorStopsEditor } from '@/components/ui/ColorStopsEditor'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@opengptdetect/ui'
+import { Button } from '@opengptdetect/ui'
+import { Label } from '@opengptdetect/ui'
+import { Input } from '@opengptdetect/ui'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@opengptdetect/ui'
+import { Slider } from '@opengptdetect/ui'
+import { Separator } from '@opengptdetect/ui'
+import { ColorStopsEditor } from '@opengptdetect/ui'
 
 type Field =
   | { kind: 'text'; key: 'serverUrl' | 'fontFamily'; labelKey: MessageKey; listId?: string }
@@ -189,7 +190,17 @@ export function SettingsDialog() {
                 {t('modal.settings.stops')}
                 <p className="mt-0.5 font-normal normal-case leading-4">{t('modal.settings.stopsHint')}</p>
               </Label>
-              <ColorStopsEditor />
+              <ColorStopsEditor
+                value={settings.stops}
+                onChange={(stops) => patch({ stops })}
+                strings={{
+                  pplLabel: t('modal.settings.stopPpl'),
+                  deleteHint: t('modal.settings.stopDeleteHint'),
+                  addLabel: t('modal.settings.stopAdd'),
+                  minStopsToast: t('toast.minStops')
+                }}
+                toast={toast}
+              />
             </div>
           </section>
         </div>

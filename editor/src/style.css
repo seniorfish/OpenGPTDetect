@@ -7,6 +7,10 @@
  */
 @import "tailwindcss";
 
+/* The shared primitives live in packages/ui (source-consumed) — their utility
+   classes are outside the auto-detected project roots, so scan them explicitly. */
+@source "../../packages/ui/src";
+
 /* Brand display font: Space Grotesk (SIL OFL 1.1). A single latin woff2
    variable face (400-700), inlined as a data-URI into the single-file build. */
 @font-face {
@@ -329,6 +333,33 @@
   font-weight: 600;
   margin-bottom: 2px;
   word-break: break-all;
+}
+.ppl-tooltip .tip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.ppl-tooltip .tip-row .tip-label {
+  margin-bottom: 0;
+}
+.ppl-tooltip .tip-action {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  pointer-events: auto; /* the tooltip container is pointer-events: none */
+  flex-shrink: 0;
+  transition: background-color 0.1s, color 0.1s;
+}
+.ppl-tooltip .tip-action:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 .ppl-tooltip .tip-dim {
   color: var(--muted-foreground);

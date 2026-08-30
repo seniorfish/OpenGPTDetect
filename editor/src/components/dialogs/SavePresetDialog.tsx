@@ -5,10 +5,10 @@ import { useSettingsStore, presetFromSettings } from '@/stores/settings.ts'
 import { usePresetsStore } from '@/stores/presets.ts'
 import { useAppStore } from '@/stores/app.ts'
 import { toast } from '@/composables/useToasts.ts'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@opengptdetect/ui'
+import { Button } from '@opengptdetect/ui'
+import { Label } from '@opengptdetect/ui'
+import { Input } from '@opengptdetect/ui'
 
 export function SavePresetDialog() {
   const { t } = useI18n()

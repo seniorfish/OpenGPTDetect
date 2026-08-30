@@ -18,16 +18,16 @@ import { useCommands } from '@/commands.ts'
 import { setLocale } from '@/i18n.ts'
 import { useTheme } from '@/theme.ts'
 import { toast } from '@/composables/useToasts.ts'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Switch } from '@/components/ui/switch'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Button } from '@opengptdetect/ui'
+import { Separator } from '@opengptdetect/ui'
+import { Switch } from '@opengptdetect/ui'
+import { ToggleGroup, ToggleGroupItem } from '@opengptdetect/ui'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator
-} from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { Badge } from '@/components/ui/badge'
+} from '@opengptdetect/ui'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@opengptdetect/ui'
+import { Badge } from '@opengptdetect/ui'
 import type { CommandDef } from '@/commands.ts'
 import type { ChunkMode } from '@/types.ts'
 

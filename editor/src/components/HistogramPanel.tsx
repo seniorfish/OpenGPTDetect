@@ -14,10 +14,10 @@ import { useAppStore } from '@/stores/app.ts'
 import { mergeIgnoreRanges, isIgnored } from '@/chunks.ts'
 import { clamp, colorForPpl } from '@/util.ts'
 import { registerHistoActions } from '@/commands.ts'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { Button } from '@opengptdetect/ui'
+import { Badge } from '@opengptdetect/ui'
+import { Separator } from '@opengptdetect/ui'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@opengptdetect/ui'
 
 interface HistoScale {
   x: (ppl: number) => number

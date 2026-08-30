@@ -4,7 +4,7 @@
 import { Check } from 'lucide-react'
 import { useI18n } from '@/i18n.ts'
 import { useCommands, type CommandDef } from '@/commands.ts'
-import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandShortcut } from '@/components/ui/command'
+import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandShortcut } from '@opengptdetect/ui'
 
 export interface CommandPaletteProps {
   open: boolean

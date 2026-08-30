@@ -1,0 +1,20 @@
+// ---------- @opengptdetect/ui public surface ----------
+// shadcn-style primitives (host provides design tokens) and shared controlled
+// business components. Hosts: editor (single-file SPA) and extension (WXT).
+export { ColorStopsEditor } from './ColorStopsEditor.tsx'
+export type { ColorStopsEditorProps, ColorStopsEditorStrings } from './ColorStopsEditor.tsx'
+export * from './badge'
+export * from './button'
+export * from './command'
+export * from './dialog'
+export * from './dropdown-menu'
+export * from './input'
+export * from './label'
+export * from './select'
+export * from './separator'
+export * from './slider'
+export * from './sonner'
+export * from './switch'
+export * from './toggle'
+export * from './toggle-group'
+export * from './tooltip'

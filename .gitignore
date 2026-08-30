@@ -19,6 +19,7 @@ editor/.vite/
 
 # e2e 测试截图产物
 editor/test/e2e-screenshot.png
+editor/test/design-screenshot.png
 
 # Build artifacts
 *.zip

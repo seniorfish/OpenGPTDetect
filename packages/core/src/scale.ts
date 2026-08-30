@@ -9,7 +9,7 @@ import { z } from 'zod'
 
 export const ColorStopSchema = z.object({
   ppl: z.number().nonnegative(),
-  color: z.string().regex(/^#[0-9a-f]{6}$/i)
+  color: z.string().regex(/^#[0-9a-f]{6}$/i),
 })
 export type ColorStop = z.infer<typeof ColorStopSchema>
 
@@ -19,7 +19,7 @@ export const GuidelineSchema = z.object({
   /** avg ppl above this => high-quality human text. */
   humanLikePplMin: z.number().nonnegative(),
   /** avg ppl above this => hard to read. */
-  hardPplMin: z.number().nonnegative()
+  hardPplMin: z.number().nonnegative(),
 })
 export type Guideline = z.infer<typeof GuidelineSchema>
 
@@ -33,9 +33,9 @@ export const PplScaleProfileSchema = z.object({
   tags: z.array(z.string()).min(1).optional(),
   scale: z.object({
     mode: z.literal('linear'),
-    stops: z.array(ColorStopSchema).min(1)
+    stops: z.array(ColorStopSchema).min(1),
   }),
-  guideline: GuidelineSchema
+  guideline: GuidelineSchema,
 })
 export type PplScaleProfile = z.infer<typeof PplScaleProfileSchema>
 
@@ -46,13 +46,13 @@ const SCALE_ZH: ColorStop[] = [
   { ppl: 12, color: '#22c55e' },
   { ppl: 18, color: '#eab308' },
   { ppl: 50, color: '#ef4444' },
-  { ppl: 100, color: '#7f1d1d' }
+  { ppl: 100, color: '#7f1d1d' },
 ]
 const SCALE_EN: ColorStop[] = [
   { ppl: 4, color: '#22c55e' },
   { ppl: 6, color: '#eab308' },
   { ppl: 16.67, color: '#ef4444' },
-  { ppl: 33.33, color: '#7f1d1d' }
+  { ppl: 33.33, color: '#7f1d1d' },
 ]
 
 export const BUILTIN_PROFILES: PplScaleProfile[] = [
@@ -63,7 +63,7 @@ export const BUILTIN_PROFILES: PplScaleProfile[] = [
     scope: '中文通用文本(zh, general text)',
     tags: ['zh', 'general'],
     scale: { mode: 'linear', stops: SCALE_ZH },
-    guideline: { aiLikePplMax: 18, humanLikePplMin: 35, hardPplMin: 50 }
+    guideline: { aiLikePplMax: 18, humanLikePplMin: 35, hardPplMin: 50 },
   },
   {
     schemaVersion: PROFILE_SCHEMA_VERSION,
@@ -72,8 +72,8 @@ export const BUILTIN_PROFILES: PplScaleProfile[] = [
     scope: 'General English prose (en, general text)',
     tags: ['en', 'general'],
     scale: { mode: 'linear', stops: SCALE_EN },
-    guideline: { aiLikePplMax: 6, humanLikePplMin: 18, hardPplMin: 25 }
-  }
+    guideline: { aiLikePplMax: 6, humanLikePplMin: 18, hardPplMin: 25 },
+  },
 ]
 
 export function parseProfile(input: unknown): PplScaleProfile {
@@ -89,4 +89,19 @@ export function tryParseProfile(input: unknown): PplScaleProfile | null {
 export function profileIssues(input: unknown): string[] {
   const r = PplScaleProfileSchema.safeParse(input)
   return r.success ? [] : r.error.issues.map((iss) => `${iss.path.join('.')}: ${iss.message}`)
+}
+
+export type ProfileParseResult =
+  { ok: true; profile: PplScaleProfile } | { ok: false; issues: string[] }
+
+/** Parse untrusted profile JSON text (import dialogs, script reads). */
+export function parseProfileText(text: string): ProfileParseResult {
+  let data: unknown
+  try {
+    data = JSON.parse(text)
+  } catch (err) {
+    return { ok: false, issues: ['invalid JSON: ' + String((err as Error).message)] }
+  }
+  const r = PplScaleProfileSchema.safeParse(data)
+  return r.success ? { ok: true, profile: r.data } : { ok: false, issues: profileIssues(data) }
 }

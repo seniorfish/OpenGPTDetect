@@ -3,6 +3,9 @@
 // business components. Hosts: editor (single-file SPA) and extension (WXT).
 export { ColorStopsEditor } from './ColorStopsEditor.tsx'
 export type { ColorStopsEditorProps, ColorStopsEditorStrings } from './ColorStopsEditor.tsx'
+export { ProfileDialog } from './ProfileDialog.tsx'
+export type { ProfileDialogProps, ProfileDialogStrings } from './ProfileDialog.tsx'
+export { downloadJson } from './lib/download.ts'
 export * from './badge'
 export * from './button'
 export * from './command'

@@ -38,7 +38,12 @@ import { mountFloatingUi, type FloatingUi } from '../lib/floating.tsx'
 import type { AiVerdict, BlockDetailInput } from '../components/block-detail.tsx'
 
 /** Stops for a detected class; falls back to the built-in zh/en defaults. */
-function stopsFor(lang: 'zh' | 'en', profiles: ExtensionSettings['profiles']): ColorStop[] {
+function stopsFor(
+  lang: 'zh' | 'en',
+  profiles: ExtensionSettings['profiles'],
+  overrides: ColorStop[] | null,
+): ColorStop[] {
+  if (overrides && overrides.length) return overrides
   const profile = BUILTIN_PROFILES.find((p) => p.id === profiles[lang])
   return (profile ?? BUILTIN_PROFILES[lang === 'zh' ? 0 : 1]!).scale.stops
 }
@@ -250,7 +255,7 @@ export default defineContentScript({
             offset,
             len,
             settings!,
-            stopsFor(m.lang, settings!.profiles),
+            stopsFor(m.lang, settings!.profiles, settings!.scaleOverrides),
           )
         } catch {
           // a DOM hiccup must not kill the queue

@@ -3,10 +3,11 @@ import { z } from 'zod'
 import {
   BUILTIN_PROFILES,
   parseProfile,
+  parseProfileText,
   tryParseProfile,
   profileIssues,
   PplScaleProfileSchema,
-  PROFILE_SCHEMA_VERSION
+  PROFILE_SCHEMA_VERSION,
 } from '../src/scale.ts'
 
 describe('builtin profiles', () => {
@@ -33,7 +34,7 @@ describe('parseProfile validation', () => {
     name: 'X',
     scope: 'whatever',
     scale: { mode: 'linear', stops: [{ ppl: 1, color: '#22c55e' }] },
-    guideline: { aiLikePplMax: 1, humanLikePplMin: 2, hardPplMin: 3 }
+    guideline: { aiLikePplMax: 1, humanLikePplMin: 2, hardPplMin: 3 },
   }
 
   it('accepts the minimal valid profile', () => {
@@ -47,8 +48,15 @@ describe('parseProfile validation', () => {
   })
 
   it('rejects non-hex colors and negative ppl', () => {
-    expect(tryParseProfile({ ...good, scale: { mode: 'linear', stops: [{ ppl: 1, color: 'red' }] } })).toBeNull()
-    expect(tryParseProfile({ ...good, scale: { mode: 'linear', stops: [{ ppl: -1, color: '#22c55e' }] } })).toBeNull()
+    expect(
+      tryParseProfile({ ...good, scale: { mode: 'linear', stops: [{ ppl: 1, color: 'red' }] } }),
+    ).toBeNull()
+    expect(
+      tryParseProfile({
+        ...good,
+        scale: { mode: 'linear', stops: [{ ppl: -1, color: '#22c55e' }] },
+      }),
+    ).toBeNull()
   })
 
   it('rejects unknown schemaVersion', () => {
@@ -56,9 +64,27 @@ describe('parseProfile validation', () => {
   })
 })
 
+describe('parseProfileText (untrusted import text)', () => {
+  it('parses valid profile text', () => {
+    const r = parseProfileText(JSON.stringify(BUILTIN_PROFILES[1]))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.profile.id).toBe('en-default-2026')
+  })
+
+  it('rejects invalid JSON and invalid profiles with readable issues', () => {
+    expect(parseProfileText('{nope').ok).toBe(false)
+    const bad = parseProfileText(JSON.stringify({ schemaVersion: 1, id: 'x' }))
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.issues.length).toBeGreaterThan(0)
+  })
+})
+
 describe('z.toJSONSchema (canonical JSON Schema for Python/community)', () => {
   it('produces an object schema with the key members', () => {
-    const doc = z.toJSONSchema(PplScaleProfileSchema, { target: 'draft-2020-12' }) as Record<string, unknown>
+    const doc = z.toJSONSchema(PplScaleProfileSchema, { target: 'draft-2020-12' }) as Record<
+      string,
+      unknown
+    >
     expect(doc.type).toBe('object')
     const props = doc.properties as Record<string, unknown>
     expect(props.schemaVersion).toBeTruthy()

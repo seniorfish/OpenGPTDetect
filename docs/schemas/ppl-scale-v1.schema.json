@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "number",
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tags": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scale": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "linear"
+        },
+        "stops": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ppl": {
+                "type": "number",
+                "minimum": 0
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9a-f]{6}$"
+              }
+            },
+            "required": [
+              "ppl",
+              "color"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "mode",
+        "stops"
+      ],
+      "additionalProperties": false
+    },
+    "guideline": {
+      "type": "object",
+      "properties": {
+        "aiLikePplMax": {
+          "type": "number",
+          "minimum": 0
+        },
+        "humanLikePplMin": {
+          "type": "number",
+          "minimum": 0
+        },
+        "hardPplMin": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "aiLikePplMax",
+        "humanLikePplMin",
+        "hardPplMin"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "scope",
+    "scale",
+    "guideline"
+  ],
+  "additionalProperties": false,
+  "$id": "https://raw.githubusercontent.com/seniorfish/OpenGPTDetect/main/docs/schemas/ppl-scale-v1.schema.json",
+  "title": "PPL scale profile",
+  "description": "Shareable color-scale configuration: ppl->color stops plus text-classification guideline thresholds."
+}

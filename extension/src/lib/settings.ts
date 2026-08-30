@@ -5,6 +5,12 @@
 // files themselves (profiles are pure data).
 import { z } from 'zod'
 import { storage } from 'wxt/utils/storage'
+import {
+  BUILTIN_PROFILES,
+  ColorStopSchema,
+  PplScaleProfileSchema,
+  type PplScaleProfile,
+} from '@opengptdetect/core'
 
 export const ExtensionSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -53,13 +59,16 @@ export const ExtensionSettingsSchema = z.object({
   // Detected-class -> profile binding (profile files stay pure data).
   profiles: z.object({
     zh: z.string().min(1),
-    en: z.string().min(1)
+    en: z.string().min(1),
   }),
+
+  // User color-stack override; null = follow the bound profile's stops (S7).
+  scaleOverrides: z.array(ColorStopSchema).min(1).nullable(),
 
   // Site lists
   listMode: z.enum(['off', 'blacklist', 'whitelist']),
   whitelist: z.array(z.string()),
-  blacklist: z.array(z.string())
+  blacklist: z.array(z.string()),
 })
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>
 
@@ -102,6 +111,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   smoothingWindowSize: 2,
 
   profiles: { zh: 'zh-default-2026', en: 'en-default-2026' },
+  scaleOverrides: null,
 
   listMode: 'blacklist',
   whitelist: [],
@@ -110,7 +120,11 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 
 export const settingsItem = storage.defineItem<ExtensionSettings>('local:settings', {
   fallback: DEFAULT_SETTINGS,
-  version: 1
+  version: 2,
+  migrations: {
+    // v1 -> v2: add the profile color-stack override (none stored before S7).
+    2: (old) => ({ ...old, scaleOverrides: null }),
+  },
 })
 
 /** Read + re-validate (defense-in-depth against tampered storage). */
@@ -122,11 +136,50 @@ export async function getSettings(): Promise<ExtensionSettings> {
   return { ...DEFAULT_SETTINGS }
 }
 
-export async function setSettingsPatch(patch: Partial<ExtensionSettings>): Promise<ExtensionSettings> {
+export async function setSettingsPatch(
+  patch: Partial<ExtensionSettings>,
+): Promise<ExtensionSettings> {
   const next = { ...(await getSettings()), ...patch }
   const parsed = ExtensionSettingsSchema.parse(next)
   await settingsItem.setValue(parsed)
   return parsed
+}
+
+// ----- User profile library (imported profiles, pure storage, validated) -----
+
+export const profileLibItem = storage.defineItem<PplScaleProfile[]>('local:profileLib', {
+  fallback: [],
+  version: 1,
+})
+
+/** Read + re-validate every stored profile (defense-in-depth). */
+export async function getProfileLib(): Promise<PplScaleProfile[]> {
+  const raw = await profileLibItem.getValue()
+  return Array.isArray(raw) ? raw.filter((p) => PplScaleProfileSchema.safeParse(p).success) : []
+}
+
+export async function upsertProfile(profile: PplScaleProfile): Promise<PplScaleProfile[]> {
+  const lib = await getProfileLib()
+  const next = [...lib.filter((p) => p.id !== profile.id), profile]
+  await profileLibItem.setValue(next)
+  return next
+}
+
+export async function removeProfile(id: string): Promise<PplScaleProfile[]> {
+  const lib = await getProfileLib()
+  const next = lib.filter((p) => p.id !== id)
+  await profileLibItem.setValue(next)
+  return next
+}
+
+/** Built-in + user profiles; the user library cannot shadow a built-in id. */
+export function allProfiles(lib: PplScaleProfile[]): PplScaleProfile[] {
+  return [...BUILTIN_PROFILES, ...lib.filter((p) => !BUILTIN_PROFILES.some((b) => b.id === p.id))]
+}
+
+/** Resolve a bound id to its profile (built-ins win; the library cannot shadow them). */
+export function findProfile(id: string, lib: PplScaleProfile[]): PplScaleProfile | undefined {
+  return BUILTIN_PROFILES.find((p) => p.id === id) ?? lib.find((p) => p.id === id)
 }
 
 /** One-shot migration of the legacy flat chrome.storage.local keys (pre-S5). */

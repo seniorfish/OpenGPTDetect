@@ -5,39 +5,55 @@
 // goes through `patchSettings`; the app store's settings subscription then
 // fires the matching refresh (editor decoration / fonts / health probe), so no
 // per-field commit hook is needed anymore.
+import { useRef, useState } from 'react'
 import { useI18n, type MessageKey } from '@/i18n.ts'
 import { toast } from '@/composables/useToasts.ts'
 import { useSettingsStore } from '@/stores/settings.ts'
 import { useAppStore } from '@/stores/app.ts'
 import { clamp } from '@/util.ts'
+import { parseProfileText } from '@opengptdetect/core'
 import type { HeatStyle } from '@/types.ts'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@opengptdetect/ui'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@opengptdetect/ui'
 import { Button } from '@opengptdetect/ui'
 import { Label } from '@opengptdetect/ui'
 import { Input } from '@opengptdetect/ui'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@opengptdetect/ui'
 import { Slider } from '@opengptdetect/ui'
 import { Separator } from '@opengptdetect/ui'
-import { ColorStopsEditor } from '@opengptdetect/ui'
+import { ColorStopsEditor, ProfileDialog, downloadJson } from '@opengptdetect/ui'
 
 type Field =
   | { kind: 'text'; key: 'serverUrl' | 'fontFamily'; labelKey: MessageKey; listId?: string }
-  | { kind: 'select'; key: 'style'; labelKey: MessageKey; options: Array<{ value: HeatStyle; labelKey: MessageKey }> }
+  | {
+      kind: 'select'
+      key: 'style'
+      labelKey: MessageKey
+      options: Array<{ value: HeatStyle; labelKey: MessageKey }>
+    }
   | { kind: 'slider'; key: 'opacity'; labelKey: MessageKey }
   | { kind: 'number'; key: 'fontSize'; labelKey: MessageKey; min: number; max: number }
 
 const fields: Field[] = [
   { kind: 'text', key: 'serverUrl', labelKey: 'modal.settings.backendUrl' },
   {
-    kind: 'select', key: 'style', labelKey: 'modal.settings.style',
+    kind: 'select',
+    key: 'style',
+    labelKey: 'modal.settings.style',
     options: [
       { value: 'background', labelKey: 'modal.settings.styleBackground' },
-      { value: 'underline', labelKey: 'modal.settings.styleUnderline' }
-    ]
+      { value: 'underline', labelKey: 'modal.settings.styleUnderline' },
+    ],
   },
   { kind: 'slider', key: 'opacity', labelKey: 'modal.settings.opacity' },
   { kind: 'number', key: 'fontSize', labelKey: 'modal.settings.fontSize', min: 10, max: 32 },
-  { kind: 'text', key: 'fontFamily', labelKey: 'modal.settings.fontFamily', listId: 'font-list' }
+  { kind: 'text', key: 'fontFamily', labelKey: 'modal.settings.fontFamily', listId: 'font-list' },
 ]
 
 const FONT_CHOICES = [
@@ -46,16 +62,36 @@ const FONT_CHOICES = [
   'SimSun, serif',
   'KaiTi, serif',
   "Consolas, 'Courier New', monospace",
-  'Georgia, serif'
+  'Georgia, serif',
 ]
+
+const PROFILE_GUIDELINE = { aiLikePplMax: 18, humanLikePplMin: 35, hardPplMin: 50 }
 
 export function SettingsDialog() {
   const { t } = useI18n()
   const settings = useSettingsStore((s) => s.settings)
   const closeModal = useAppStore((s) => s.closeModal)
   const patch = useSettingsStore((s) => s.patchSettings)
+  const [exportOpen, setExportOpen] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const opacityPct = `${Math.round(settings.opacity * 100)}%`
+
+  async function onProfileFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file
+    if (!file) return
+    const result = parseProfileText(await file.text())
+    if (result.ok) {
+      patch({ stops: result.profile.scale.stops.map((s) => ({ ...s })) })
+      toast(t('toast.profileImported', { name: result.profile.name }))
+    } else {
+      toast(
+        t('toast.profileImportFailed', { issues: result.issues.slice(0, 3).join('; ') }),
+        'error',
+      )
+    }
+  }
 
   function onSelectChange(field: Field, value: string): void {
     if (field.kind === 'select') patch({ style: value as HeatStyle })
@@ -93,7 +129,9 @@ export function SettingsDialog() {
         <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
           {/* Connection */}
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-muted-foreground">{t('settings.section.connection')}</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {t('settings.section.connection')}
+            </h3>
             <FieldRow label={t('modal.settings.backendUrl')}>
               <Input
                 id="set-url"
@@ -110,9 +148,14 @@ export function SettingsDialog() {
 
           {/* Rendering */}
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-muted-foreground">{t('settings.section.rendering')}</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {t('settings.section.rendering')}
+            </h3>
             <FieldRow label={t('modal.settings.style')}>
-              <Select value={settings.style} onValueChange={(v) => onSelectChange(fields[1] as Field, v)}>
+              <Select
+                value={settings.style}
+                onValueChange={(v) => onSelectChange(fields[1] as Field, v)}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue />
                 </SelectTrigger>
@@ -137,7 +180,9 @@ export function SettingsDialog() {
                     className="max-w-52"
                     onValueChange={onOpacityChange}
                   />
-                  <span id="opacity-val" className="w-10 text-xs tabular-nums text-foreground">{opacityPct}</span>
+                  <span id="opacity-val" className="w-10 text-xs tabular-nums text-foreground">
+                    {opacityPct}
+                  </span>
                 </div>
               </FieldRow>
             )}
@@ -147,7 +192,9 @@ export function SettingsDialog() {
 
           {/* Editor */}
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-muted-foreground">{t('settings.section.editor')}</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {t('settings.section.editor')}
+            </h3>
             <FieldRow label={t('modal.settings.fontSize')}>
               <Input
                 id="set-font-size"
@@ -157,7 +204,9 @@ export function SettingsDialog() {
                 max={32}
                 step="1"
                 className="w-24"
-                onBlur={(e) => onNumberCommit(fields[3] as Field & { kind: 'number' }, e.target.value)}
+                onBlur={(e) =>
+                  onNumberCommit(fields[3] as Field & { kind: 'number' }, e.target.value)
+                }
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               />
             </FieldRow>
@@ -168,7 +217,9 @@ export function SettingsDialog() {
                   type="text"
                   defaultValue={settings.fontFamily}
                   list="font-list"
-                  onBlur={(e) => onTextCommit(fields[4] as Field & { kind: 'text' }, e.target.value)}
+                  onBlur={(e) =>
+                    onTextCommit(fields[4] as Field & { kind: 'text' }, e.target.value)
+                  }
                   onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                 />
                 <datalist id="font-list">
@@ -184,11 +235,15 @@ export function SettingsDialog() {
 
           {/* Colors */}
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold text-muted-foreground">{t('settings.section.colors')}</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground">
+              {t('settings.section.colors')}
+            </h3>
             <div className="grid grid-cols-[110px_1fr] items-start gap-3">
               <Label className="mt-1 text-right text-xs text-muted-foreground">
                 {t('modal.settings.stops')}
-                <p className="mt-0.5 font-normal normal-case leading-4">{t('modal.settings.stopsHint')}</p>
+                <p className="mt-0.5 font-normal normal-case leading-4">
+                  {t('modal.settings.stopsHint')}
+                </p>
               </Label>
               <ColorStopsEditor
                 value={settings.stops}
@@ -197,19 +252,68 @@ export function SettingsDialog() {
                   pplLabel: t('modal.settings.stopPpl'),
                   deleteHint: t('modal.settings.stopDeleteHint'),
                   addLabel: t('modal.settings.stopAdd'),
-                  minStopsToast: t('toast.minStops')
+                  minStopsToast: t('toast.minStops'),
                 }}
                 toast={toast}
+              />
+            </div>
+            <div className="flex gap-2 pl-[113px]">
+              <Button
+                id="profile-import"
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+              >
+                {t('modal.settings.profileImport')}
+              </Button>
+              <Button
+                id="profile-export"
+                variant="outline"
+                size="sm"
+                onClick={() => setExportOpen(true)}
+              >
+                {t('modal.settings.profileExport')}
+              </Button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => void onProfileFile(e)}
               />
             </div>
           </section>
         </div>
 
+        <ProfileDialog
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          stops={settings.stops}
+          defaultGuideline={PROFILE_GUIDELINE}
+          strings={{
+            title: t('profileDialog.title'),
+            hint: t('profileDialog.hint'),
+            nameLabel: t('profileDialog.name'),
+            idLabel: t('profileDialog.id'),
+            scopeLabel: t('profileDialog.scope'),
+            guidelineLabel: t('profileDialog.guideline'),
+            aiLikeLabel: t('profileDialog.aiLike'),
+            humanLikeLabel: t('profileDialog.humanLike'),
+            hardPplLabel: t('profileDialog.hardPpl'),
+            cancelLabel: t('profileDialog.cancel'),
+            exportLabel: t('profileDialog.export'),
+            invalidHint: t('profileDialog.invalid'),
+          }}
+          onExport={(profile) => downloadJson(`${profile.id}.ppl-scale.json`, profile)}
+        />
+
         <DialogFooter className="gap-2">
           <Button id="stops-reset" variant="outline" onClick={resetStops}>
             {t('modal.settings.resetStops')}
           </Button>
-          <Button variant="outline" onClick={closeModal}>{t('modal.close')}</Button>
+          <Button variant="outline" onClick={closeModal}>
+            {t('modal.close')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

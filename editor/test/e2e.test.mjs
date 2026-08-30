@@ -200,6 +200,13 @@ await sleep(150)
 await page.click('#btn-settings')
 await sleep(250)
 check('设置弹窗含颜色节点编辑', await evalFn(() => document.querySelectorAll('.stop-row').length === 4))
+// Profile import/export entry (S7).
+check('设置弹窗含导入导出按钮', await evalFn(() => !!document.querySelector('#profile-export') && !!document.querySelector('#profile-import')))
+await page.click('#profile-export')
+await sleep(250)
+check('导出对话框可打开', await evalFn(() => !!document.querySelector('[data-slot=dialog-content]')))
+await page.keyboard.press('Escape')
+await sleep(150)
 await page.click('.modal-close')
 await sleep(150)
 

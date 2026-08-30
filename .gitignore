@@ -13,6 +13,10 @@ node_modules/
 editor/dist/
 editor/.vite/
 
+# WXT build artifacts
+.output/
+.wxt/
+
 # e2e 测试截图产物
 editor/test/e2e-screenshot.png
 

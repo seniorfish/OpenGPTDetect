@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.output/
+.wxt/
+.vite/
+editor/test/
+*.png
+package-lock.json
+docs/schemas/

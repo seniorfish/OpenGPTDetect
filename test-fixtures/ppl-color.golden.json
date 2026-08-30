@@ -1,0 +1,42 @@
+{
+  "algorithm": "endpoint clamp + linear interpolation in sRGB, channel rounding via Math.round",
+  "slots": {
+    "zh-default-2026": {
+      "stops": [
+        { "ppl": 12, "color": "#22c55e" },
+        { "ppl": 18, "color": "#eab308" },
+        { "ppl": 50, "color": "#ef4444" },
+        { "ppl": 100, "color": "#7f1d1d" }
+      ]
+    },
+    "en-default-2026": {
+      "stops": [
+        { "ppl": 4, "color": "#22c55e" },
+        { "ppl": 6, "color": "#eab308" },
+        { "ppl": 16.67, "color": "#ef4444" },
+        { "ppl": 33.33, "color": "#7f1d1d" }
+      ]
+    }
+  },
+  "cases": [
+    { "name": "zh clamp low", "slot": "zh-default-2026", "ppl": 0, "expected": "#22c55e" },
+    { "name": "zh exact stop 1", "slot": "zh-default-2026", "ppl": 12, "expected": "#22c55e" },
+    { "name": "zh exact stop 2", "slot": "zh-default-2026", "ppl": 18, "expected": "#eab308" },
+    { "name": "zh exact stop 3", "slot": "zh-default-2026", "ppl": 50, "expected": "#ef4444" },
+    { "name": "zh exact stop 4", "slot": "zh-default-2026", "ppl": 100, "expected": "#7f1d1d" },
+    { "name": "zh clamp high", "slot": "zh-default-2026", "ppl": 500, "expected": "#7f1d1d" },
+    { "name": "zh mid 12-18", "slot": "zh-default-2026", "ppl": 15, "expected": "#86bc33" },
+    { "name": "zh mid 18-50", "slot": "zh-default-2026", "ppl": 34, "expected": "#ed7c26" },
+    { "name": "zh mid 50-100", "slot": "zh-default-2026", "ppl": 75, "expected": "#b73131" },
+    { "name": "zh near 18", "slot": "zh-default-2026", "ppl": 18.5, "expected": "#eab109" },
+    { "name": "en clamp low", "slot": "en-default-2026", "ppl": 0, "expected": "#22c55e" },
+    { "name": "en exact stop 1", "slot": "en-default-2026", "ppl": 4, "expected": "#22c55e" },
+    { "name": "en exact stop 2", "slot": "en-default-2026", "ppl": 6, "expected": "#eab308" },
+    { "name": "en exact stop 3", "slot": "en-default-2026", "ppl": 16.67, "expected": "#ef4444" },
+    { "name": "en exact stop 4", "slot": "en-default-2026", "ppl": 33.33, "expected": "#7f1d1d" },
+    { "name": "en clamp high", "slot": "en-default-2026", "ppl": 999, "expected": "#7f1d1d" },
+    { "name": "en mid 4-6", "slot": "en-default-2026", "ppl": 5, "expected": "#86bc33" },
+    { "name": "en mid 6-16.67", "slot": "en-default-2026", "ppl": 11.335, "expected": "#ed7c26" },
+    { "name": "en mid 16.67-33.33", "slot": "en-default-2026", "ppl": 25, "expected": "#b73131" }
+  ]
+}

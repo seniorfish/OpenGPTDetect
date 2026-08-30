@@ -83,7 +83,7 @@ export function SettingsDialog() {
 
   return (
     <Dialog open onOpenChange={(o) => !o && closeModal()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{t('modal.settings.title')}</DialogTitle>
           <DialogDescription>{t('modal.settings.hint')}</DialogDescription>
@@ -198,7 +198,7 @@ export function SettingsDialog() {
           <Button id="stops-reset" variant="outline" onClick={resetStops}>
             {t('modal.settings.resetStops')}
           </Button>
-          <Button variant="secondary" onClick={closeModal}>{t('modal.close')}</Button>
+          <Button variant="outline" onClick={closeModal}>{t('modal.close')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

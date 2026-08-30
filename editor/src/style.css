@@ -144,6 +144,10 @@
     background: color-mix(in oklab, var(--ring) 28%, transparent);
     color: var(--foreground);
   }
+  /* Every clickable control shows the pointer cursor (unless disabled). */
+  button:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 /* ---------- tw-animate-css equivalent (components animate via data-[state=*]) ---------- */

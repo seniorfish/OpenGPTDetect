@@ -122,11 +122,11 @@ src/entrypoints/
 
 | 步 | 内容 | 置信 | 验证(结束标志) | D:\references 计划 |
 |---|---|---|---|---|
-| **S0 工程基线** | root workspaces + prettier/eslint flat + 根 .gitignore 增补;`npm install` 全量 | 🟢 | `npm run typecheck -w editor` 绿;无 ERESOLVE;root lock 生成 | 无 |
-| **S1 packages/core** | 迁 schemas/api/color/smooth + 新写 measure/errors/state/messages/scale(内置 profile);单测迁入;`z.toJSONSchema` | 🟡(Zod4 JSON Schema 新面) | core 全量 vitest 绿 + golden v1 通过 | **zod/04** 必读；01/02/03 按需 |
-| **S2 editor 切 core** | import 改名;删本地副本 | 🟢 | editor `npm test` + e2e(需 mock server)绿 | — |
-| **S3 packages/ui + editor 切换** | 原语迁移;ColorStopsEditor 受控化;style.css 加 `@source` | 🟡(@source 为实测点) | editor 全绿 + design-screenshot 视觉回归 | **tailwindcss/02** 必读 |
-| **S4 WXT 骨架** | 手工搭 entrypoints(不跑 `wxt init`);wxt.config(module-react + tailwindcss);popup/options 最小页;root workspaces 补 `extension` | 🟡(web-ext 自动开浏览器/Windows) | `wxt build` 产出 `.output/chrome-mv3` | **WXT reference.md/react.md/config.md 精读** |
+| **S0 工程基线** ✅ | root workspaces + prettier/eslint flat + 根 .gitignore 增补;`npm install` 全量 | 🟢 | `npm run typecheck -w editor` 绿;无 ERESOLVE;root lock 生成 | 无 |
+| **S1 packages/core** ✅ | 迁 schemas/api/color/smooth + 新写 measure/errors/state/messages/scale(内置 profile);单测迁入;`z.toJSONSchema` | 🟡(Zod4 JSON Schema 新面) | core 全量 vitest 绿 + golden v1 通过 | **zod/04** 必读；01/02/03 按需 |
+| **S2 editor 切 core** ✅ | import 改名;删本地副本 | 🟢 | editor `npm test` + e2e(需 mock server)绿 | — |
+| **S3 packages/ui + editor 切换** ✅ | 原语迁移;ColorStopsEditor 受控化;style.css 加 `@source` | 🟡(@source 为实测点) | editor 全绿 + design-screenshot 视觉回归 | **tailwindcss/02** 必读 |
+| **S4 WXT 骨架** ✅ | 手工搭 entrypoints(不跑 `wxt init`);wxt.config(module-react + tailwindcss);popup/options 最小页;root workspaces 补 `extension` | 🟡(web-ext 自动开浏览器/Windows) | `wxt build` 产出 `.output/chrome-mv3` | **WXT reference.md/react.md/config.md 精读** |
 | **S5 纯函数落 content** | dom-scan 拆分;测量管线用 core(state+errors+messages);background 消息翻新 | 🟡(DOM 行为保持敏感) | WxtVitest 行为测试绿;mock server 手动验证 | **WXT extension-apis.md 必读** |
 | **S6 浮层 UI** | createShadowRootUi + cssInjectionMode ui + `font-size:16px` + Radix portal 指回 shadow root | 🟡(Radix 文档就绪后升 🟢) | 多站点(不同 root font-size)实测:无缩放、弹窗样式完整 | **D:\references\Radix\reference.md(用户后台制作中,S6 前必读)**;WXT react.md CSS notes 复查 |
 | **S7 profile 落地** | core/scale.ts 终版 + `z.toJSONSchema` 产出;editor 导入导出;extension options+profile 库(storage migrations) | 🟡 | 双端导入→渲染一致;python jsonschema 验同文件 | zod/04 复查;WXT extension-apis.md(storage)复查 |

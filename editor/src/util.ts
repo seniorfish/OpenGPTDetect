@@ -1,5 +1,8 @@
 // ---------- Shared utilities ----------
-import type { ColorStop } from './types.ts'
+// The color mapping (hex helpers, colorForPpl, rgba) is owned by
+// @opengptdetect/core — re-exported here so call sites stay unchanged and the
+// implementation exists in exactly one place.
+export { colorForPpl, hexToRgb, rgbToHex, rgba } from '@opengptdetect/core'
 
 /**
  * cyrb53 string hash. Used to compare "the text sent in a request" with "the
@@ -48,50 +51,6 @@ export function debounce<A extends unknown[]>(
   }
   wrapped.cancel = () => clearTimeout(timer)
   return wrapped
-}
-
-// ---------- Color ----------
-
-/** '#rrggbb' -> [r, g, b] */
-export function hexToRgb(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
-  if (!m) return [128, 128, 128]
-  const n = parseInt(m[1], 16)
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
-}
-
-export function rgbToHex([r, g, b]: [number, number, number]): string {
-  const h = (v: number) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0')
-  return '#' + h(r) + h(g) + h(b)
-}
-
-/**
- * Interpolate along color stops. stops: [{ppl, color}] sorted by ppl ascending.
- * Below the lowest stop the endpoint color is used, above the highest the endpoint
- * color is used, and in between values are linearly interpolated.
- */
-export function colorForPpl(ppl: number, stops: ColorStop[]): string {
-  if (!stops.length) return '#999999'
-  const sorted = [...stops].sort((a, b) => a.ppl - b.ppl)
-  if (ppl <= sorted[0].ppl) return sorted[0].color
-  const last = sorted[sorted.length - 1]
-  if (ppl >= last.ppl) return last.color
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i]
-    const b = sorted[i + 1]
-    if (ppl >= a.ppl && ppl <= b.ppl) {
-      const tm = b.ppl === a.ppl ? 0 : (ppl - a.ppl) / (b.ppl - a.ppl)
-      const ca = hexToRgb(a.color)
-      const cb = hexToRgb(b.color)
-      return rgbToHex([ca[0] + (cb[0] - ca[0]) * tm, ca[1] + (cb[1] - ca[1]) * tm, ca[2] + (cb[2] - ca[2]) * tm])
-    }
-  }
-  return last.color
-}
-
-export function rgba(hex: string, alpha: number): string {
-  const [r, g, b] = hexToRgb(hex)
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 /** Number formatting: keeps significant decimal places; uses scientific notation for very large/small values. */

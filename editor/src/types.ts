@@ -1,7 +1,14 @@
 // ---------- Shared data contracts ----------
-// Backend response types re-export from schemas.ts (the single source); the
-// shapes below are app-internal (indices are UTF-16 code units).
-export type { HealthResponse, PplResponse, TokenDetail } from './schemas.ts'
+// Backend response types re-export from @opengptdetect/core (the single source);
+// the shapes below are app-internal (indices are UTF-16 code units).
+import type { ColorStop } from '@opengptdetect/core'
+
+export type {
+  HealthResponse,
+  PplResponse,
+  TokenDetail,
+  ColorStop
+} from '@opengptdetect/core'
 
 /** A [start, end) half-open span in UTF-16 code units */
 export interface Range {
@@ -34,11 +41,6 @@ export interface Chunk extends Range {
 // Chunking / heat-map rendering configuration
 export type ChunkMode = 'token' | 'sentence' | 'paragraph'
 export type HeatStyle = 'background' | 'underline'
-
-export interface ColorStop {
-  ppl: number
-  color: string
-}
 
 export interface Settings {
   serverUrl: string

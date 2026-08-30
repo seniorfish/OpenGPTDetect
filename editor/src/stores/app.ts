@@ -8,12 +8,12 @@
 // no derived state is mirrored into this store.
 import { create } from 'zustand'
 import { createEditor, type EditorApi } from '../editor.ts'
-import { createApi } from '../api.ts'
+import { createApi, createFetchTransport } from '@opengptdetect/core'
 import { hashText, buildCpToUtf16Map, debounce } from '../util.ts'
 import { useSettingsStore } from './settings.ts'
 import { toast } from '../composables/useToasts.ts'
 import { t } from '../i18n.ts'
-import type { HealthResponse } from '../schemas.ts'
+import type { HealthResponse } from '@opengptdetect/core'
 import type { Range as DocRange, Token } from '../types.ts'
 
 export type ModalKind = 'settings' | 'savePreset' | 'managePresets'
@@ -56,7 +56,7 @@ export interface AppStore {
   documentText: () => string
 }
 
-const api = createApi(() => useSettingsStore.getState().settings.serverUrl)
+const api = createApi(createFetchTransport(), () => useSettingsStore.getState().settings.serverUrl)
 
 // Module-scoped (non-store) handles for side-effect lifecycles.
 let healthPollTimer: ReturnType<typeof setInterval> | null = null
@@ -204,7 +204,8 @@ export const useAppStore = create<AppStore>((set, get) => {
           bumpCursor()
         },
         onSelectionChanged: () => bumpCursor(),
-        onAnalyze: () => void get().analyze(true)
+        onAnalyze: () => void get().analyze(true),
+        onIgnoreSelection: () => get().addIgnoreFromSelection()
       },
       () => useSettingsStore.getState().settings
     )

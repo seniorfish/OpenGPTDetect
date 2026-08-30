@@ -135,7 +135,6 @@ export function useCommands(): { groups: typeof COMMAND_GROUPS; commands: Comman
       windowCommand('winTop', 'toTop', 'cmd.windowTop', ArrowUpToLine, chunkMode === 'token'),
       windowCommand('winAll', 'toAll', 'cmd.windowAll', Maximize, chunkMode === 'token'),
       { id: 'ignoreSelection', titleKey: 'cmd.ignoreSelection', keywords: ['ignore', 'selection', 'exclude'], group: 'ignore', icon: Ban, run: () => useAppStore.getState().addIgnoreFromSelection() },
-      { id: 'ignoreList', titleKey: 'cmd.ignoreList', keywords: ['ignore', 'list', 'manage'], group: 'ignore', icon: SlidersHorizontal, run: () => useAppStore.getState().openModal('ignoreList') },
       { id: 'savePreset', titleKey: 'cmd.savePreset', keywords: ['preset', 'save'], group: 'preset', icon: Save, run: () => useAppStore.getState().openModal('savePreset') },
       { id: 'managePresets', titleKey: 'cmd.managePresets', keywords: ['preset', 'manage', 'rename', 'delete'], group: 'preset', icon: SlidersHorizontal, run: () => useAppStore.getState().openModal('managePresets') },
       { id: 'themeLight', titleKey: 'cmd.themeLight', keywords: ['theme', 'light'], group: 'appearance', icon: Sun, active: theme === 'light', run: () => setTheme('light') },

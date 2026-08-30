@@ -15,7 +15,6 @@ import { HistogramPanel } from '@/components/HistogramPanel.tsx'
 import { SettingsDialog } from '@/components/dialogs/SettingsDialog.tsx'
 import { SavePresetDialog } from '@/components/dialogs/SavePresetDialog.tsx'
 import { ManagePresetsDialog } from '@/components/dialogs/ManagePresetsDialog.tsx'
-import { IgnoreListDialog } from '@/components/dialogs/IgnoreListDialog.tsx'
 
 export default function App() {
   const editorWrap = useRef<HTMLDivElement | null>(null)
@@ -59,7 +58,6 @@ export default function App() {
         {activeModal === 'settings' && <SettingsDialog />}
         {activeModal === 'savePreset' && <SavePresetDialog />}
         {activeModal === 'managePresets' && <ManagePresetsDialog />}
-        {activeModal === 'ignoreList' && <IgnoreListDialog />}
 
         {/* Command palette + toasts */}
         <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />

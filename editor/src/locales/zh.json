@@ -23,8 +23,8 @@
   "header.themeDark": "深色",
   "header.themeSystem": "跟随系统",
   "header.ignore": "忽略",
+  "header.ignoreSelected": "忽略当前所选选区",
   "header.ignoreEmpty": "暂无忽略区间",
-  "header.ignoreListAction": "查看 / 管理忽略清单",
   "header.presets": "方案",
 
   "cmd.group.run": "运行",
@@ -47,7 +47,6 @@
   "cmd.windowTop": "跳到最高窗口",
   "cmd.windowAll": "显示全部",
   "cmd.ignoreSelection": "忽略选区",
-  "cmd.ignoreList": "查看忽略清单",
   "cmd.savePreset": "保存为方案…",
   "cmd.managePresets": "管理方案…",
   "cmd.loadPreset": "载入方案「{name}」",
@@ -133,9 +132,6 @@
   "modal.manage.delete": "删除",
   "modal.manage.empty": "暂无方案",
 
-  "modal.ignore.title": "忽略清单",
-  "modal.ignore.hint": "忽略的选区仍作为上下文发送给模型，但不参与任何统计。",
-  "modal.ignore.empty": "清单为空。选中文字后在「忽略」菜单中点击「忽略选区」即可添加。",
   "modal.ignore.chars": "{n} 字符",
   "modal.ignore.remove": "移除",
   "modal.ignore.clearAll": "清空全部",

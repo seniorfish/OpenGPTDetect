@@ -135,22 +135,21 @@ await page.keyboard.press('Enter')
 await sleep(300)
 check('忽略计数为 1', (await text('#ignore-count')) === '1')
 check('忽略后覆盖率下降', !(await text('#st-cov')).includes('100%'))
-// Open the ignore-list modal from the palette
-await page.keyboard.down('Control')
-await page.keyboard.press('k')
-await page.keyboard.up('Control')
+// The ignored ranges are managed inline in the header Ignore menu.
+const ignoreTrig = await evalFn(() => {
+  const svg = document.querySelector('svg.lucide-list-filter')
+  const btn = svg.closest('button')
+  const r = btn.getBoundingClientRect()
+  return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+})
+await page.mouse.click(ignoreTrig.x, ignoreTrig.y)
+await sleep(300)
+check('忽略菜单内列出被忽略区间', await evalFn(() => document.querySelectorAll('.ignore-row').length === 1))
+await page.click('.ignore-row button') // inline remove
 await sleep(250)
-await page.keyboard.type('忽略清单')
-await sleep(250)
-await page.keyboard.press('Enter')
-await sleep(250)
-const ignoreRows = await evalFn(() => document.querySelectorAll('.ignore-row').length)
-check('忽略清单弹窗有条目', ignoreRows === 1)
-await page.click('.ignore-row button') // remove
-await sleep(150)
-await page.click('.modal-close')
-await sleep(150)
 check('移除忽略后计数归零', !(await $('#ignore-count')))
+await page.keyboard.press('Escape')
+await sleep(150)
 
 // ---------- Token mode + layered display (requirement 5) ----------
 await evalFn(() => {

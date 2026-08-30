@@ -6,8 +6,9 @@
 // Every "open a menu" entry is an icon-only ghost button with a tooltip — no
 // width-dependent labels, so the bar never reshapes between breakpoints.
 // Undo/redo stay reachable via the palette's edit group and Ctrl+Z / Ctrl+Y.
+import { useMemo } from 'react'
 import {
-  Check, Languages, ListFilter, Loader2, Moon, Palette, Play, Search, Sun
+  Check, Languages, ListFilter, Loader2, Moon, Palette, Play, Search, Sun, Trash2
 } from 'lucide-react'
 import { useI18n } from '@/i18n.ts'
 import { useAppStore } from '@/stores/app.ts'
@@ -43,12 +44,26 @@ export function AppHeader({ onOpenPalette }: AppHeaderProps) {
   const chunkMode = useSettingsStore((s) => s.settings.chunkMode)
   const autoRefresh = useSettingsStore((s) => s.settings.autoRefresh)
   const presets = usePresetsStore((s) => s.presets)
+  const removeIgnoreAt = useAppStore((s) => s.removeIgnoreAt)
+  const clearIgnores = useAppStore((s) => s.clearIgnores)
+  const drawTick = useAppStore((s) => s.drawTick)
   const { commands } = useCommands()
   const { resolved } = useTheme()
 
+  // Ignored ranges, re-derived from the editor on each drawTick (short previews
+  // kept narrow so the popover never gets too wide).
+  const ignoreRows = useMemo(() => {
+    const app = useAppStore.getState()
+    const doc = app.documentText()
+    return app.getIgnores().map((r, i) => {
+      const preview = doc.slice(r.start, r.end).replace(/\n/g, '↵')
+      const short = preview.length > 14 ? preview.slice(0, 14) + '…' : preview
+      return { index: i, len: r.end - r.start, preview, short }
+    })
+  }, [drawTick])
+
   const byId = (id: string): CommandDef | undefined => commands.find((c) => c.id === id)
   const cmdIgnoreSelection = byId('ignoreSelection')
-  const cmdIgnoreList = byId('ignoreList')
   const cmdSavePreset = byId('savePreset')
   const cmdManagePresets = byId('managePresets')
   const cmdThemeLight = byId('themeLight')
@@ -156,22 +171,42 @@ export function AppHeader({ onOpenPalette }: AppHeaderProps) {
             </DropdownMenuTrigger>
             <TooltipContent side="bottom">{t('header.ignore')}</TooltipContent>
           </Tooltip>
-          <DropdownMenuContent align="end" className="w-56" onCloseAutoFocus={(e) => e.preventDefault()}>
-            <DropdownMenuLabel>{t('header.ignore')}</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-60" onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuItem disabled={!hasSelection} onSelect={() => cmdIgnoreSelection?.run()}>
               {cmdIgnoreSelection && <cmdIgnoreSelection.icon className="size-4" />}
-              {cmdIgnoreSelection && t(cmdIgnoreSelection.titleKey)}
+              {t('header.ignoreSelected')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            {ignoreCount === 0 ? (
+            {ignoreRows.length === 0 ? (
               <DropdownMenuItem disabled className="text-muted-foreground">
                 {t('header.ignoreEmpty')}
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onSelect={() => cmdIgnoreList?.run()}>
-                <ListFilter className="size-4" />
-                {t('header.ignoreListAction')} · {ignoreCount}
-              </DropdownMenuItem>
+              <>
+                <div className="max-h-40 overflow-y-auto p-0.5">
+                  {ignoreRows.map((row) => (
+                    <div key={row.index} className="ignore-row flex items-center gap-1.5 rounded-sm px-2 py-1 hover:bg-accent/60">
+                      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground" title={row.preview}>
+                        {`“${row.short}”`}
+                      </span>
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {t('modal.ignore.chars', { n: row.len })}
+                      </span>
+                      <Button size="icon-xs" variant="ghost" title={t('modal.ignore.remove')} onClick={() => removeIgnoreAt(row.index)}>
+                        <Trash2 className="size-3 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:bg-destructive/10 focus:text-destructive dark:focus:bg-destructive/20"
+                  onSelect={() => clearIgnores()}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                  {t('modal.ignore.clearAll')}
+                </DropdownMenuItem>
+              </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>

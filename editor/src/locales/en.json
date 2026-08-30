@@ -23,8 +23,8 @@
   "header.themeDark": "Dark",
   "header.themeSystem": "System",
   "header.ignore": "Ignore",
+  "header.ignoreSelected": "Ignore the current selection",
   "header.ignoreEmpty": "No ignored ranges",
-  "header.ignoreListAction": "View / manage ignore list",
   "header.presets": "Presets",
 
   "cmd.group.run": "Run",
@@ -47,7 +47,6 @@
   "cmd.windowTop": "Jump to top window",
   "cmd.windowAll": "Show all",
   "cmd.ignoreSelection": "Ignore selection",
-  "cmd.ignoreList": "View ignore list",
   "cmd.savePreset": "Save as preset…",
   "cmd.managePresets": "Manage presets…",
   "cmd.loadPreset": "Load preset “{name}”",
@@ -133,9 +132,6 @@
   "modal.manage.delete": "Delete",
   "modal.manage.empty": "No presets yet",
 
-  "modal.ignore.title": "Ignore list",
-  "modal.ignore.hint": "Ignored spans are still sent to the model as context, but excluded from all statistics.",
-  "modal.ignore.empty": "The list is empty. Select text and pick “Ignore selection” in the Ignore menu.",
   "modal.ignore.chars": "{n} chars",
   "modal.ignore.remove": "Remove",
   "modal.ignore.clearAll": "Clear all",

@@ -16,7 +16,7 @@ import { t } from '../i18n.ts'
 import type { HealthResponse } from '../schemas.ts'
 import type { Range as DocRange, Token } from '../types.ts'
 
-export type ModalKind = 'settings' | 'savePreset' | 'managePresets' | 'ignoreList'
+export type ModalKind = 'settings' | 'savePreset' | 'managePresets'
 
 export interface AppStore {
   health: HealthResponse | null // GET /health result, null = offline

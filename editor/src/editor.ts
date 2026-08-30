@@ -588,6 +588,8 @@ export interface EditorCallbacks {
   onDocChanged: (update: ViewUpdate) => void
   onSelectionChanged: (update: ViewUpdate) => void
   onAnalyze: () => void
+  /** Fired from the selection tooltip's "ignore" action (optional). */
+  onIgnoreSelection?: () => void
 }
 
 export interface EditorApi {
@@ -623,10 +625,17 @@ export function createEditor(
     const { tokens, ignores } = v.state.field(hmField)
     const merged = mergeIgnoreRanges(ignores)
     const stat = avgNllOfTokens(tokensInRange(tokens, sel.from, sel.to), merged)
-    const html = `<div class="tip-label">${t('tooltip.selection', { chars: sel.to - sel.from })}</div>${statHtml(stat)}`
+    const html =
+      '<div class="tip-row">' +
+      `<div class="tip-label">${t('tooltip.selection', { chars: sel.to - sel.from })}</div>` +
+      `<button type="button" class="tip-action" data-action="ignore-selection">${t('tooltip.ignoreSelection')}</button>` +
+      '</div>' +
+      statHtml(stat)
     const coords = v.coordsAtPos(sel.head) || v.coordsAtPos(sel.from)
     if (!coords) return
     showTip(overlay.selTip, html, (coords.left + coords.right) / 2, coords.top)
+    const btn = overlay.selTip.el?.querySelector<HTMLButtonElement>('[data-action="ignore-selection"]')
+    btn?.addEventListener('click', () => callbacks.onIgnoreSelection?.())
   }
 
   const updateListener = EditorView.updateListener.of((update: ViewUpdate) => {

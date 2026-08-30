@@ -156,5 +156,6 @@
   "tooltip.tokenLabel": "Token #{index} “{text}”{suffix}",
   "tooltip.sentence": "Sentence",
   "tooltip.paragraph": "Paragraph",
-  "tooltip.selection": "Selection ({chars} chars)"
+  "tooltip.selection": "Selection ({chars} chars)",
+  "tooltip.ignoreSelection": "Ignore selection"
 }

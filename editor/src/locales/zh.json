@@ -156,5 +156,6 @@
   "tooltip.tokenLabel": "Token #{index}「{text}」{suffix}",
   "tooltip.sentence": "句子",
   "tooltip.paragraph": "段落",
-  "tooltip.selection": "选区（{chars} 字符）"
+  "tooltip.selection": "选区（{chars} 字符）",
+  "tooltip.ignoreSelection": "忽略选区"
 }

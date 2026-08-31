@@ -22,6 +22,7 @@ import {
   type ColorStop,
 } from '@opengptdetect/core'
 import { getSettings, settingsItem, type ExtensionSettings } from '../lib/settings.ts'
+import { hostMatchesList } from '../lib/url-match.ts'
 import { initLocale } from '../lib/i18n.ts'
 import { send } from '../lib/messaging.ts'
 import {
@@ -85,17 +86,7 @@ export default defineContentScript({
       const s = settings!
       const mode = s.listMode
       if (mode === 'off') return true
-      const host = location.hostname
-      const match = (list: string[]): boolean =>
-        list.some((p) => {
-          const pat = p.trim().toLowerCase()
-          if (!pat) return false
-          if (pat.startsWith('*.')) {
-            const tail = pat.slice(1)
-            return host === pat.slice(2) || host.endsWith(tail)
-          }
-          return host === pat || host.endsWith('.' + pat)
-        })
+      const match = (list: string[]): boolean => hostMatchesList(location.hostname, list)
       if (mode === 'whitelist') return match(s.whitelist)
       if (mode === 'blacklist') return !match(s.blacklist)
       return true

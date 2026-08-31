@@ -77,7 +77,7 @@ export default defineContentScript({
     let unwatch: (() => void) | null = null
     let floating: FloatingUi | null = null
 
-    const queue: { state: MeasureState; unit: MeasurementUnit }[] = []
+    const queue: UnitRecord[] = []
     let inFlight = 0
     /** First-block element -> unit + state machine record. */
     const records = new Map<Element, UnitRecord>()
@@ -128,10 +128,15 @@ export default defineContentScript({
       const first = u.blocks[0]!.el
       const state = getState(first)
       if (state === 'done' || state === 'measuring') return
-      const rec = records.get(first)
+      let rec = records.get(first)
       if (rec && isTerminal(rec.state)) return
-      if (!rec) records.set(first, { state: INITIAL_MEASURE_STATE, unit: u, measured: null })
-      queue.push({ state: rec?.state ?? INITIAL_MEASURE_STATE, unit: u })
+      if (!rec) {
+        rec = { state: INITIAL_MEASURE_STATE, unit: u, measured: null }
+        records.set(first, rec)
+      }
+      // The queue holds the RECORD itself (not a state snapshot), so all
+      // duplicates of a unit share one state machine.
+      queue.push(rec)
       pump()
     }
 
@@ -140,6 +145,11 @@ export default defineContentScript({
       const concurrency = Math.max(1, settings?.measureConcurrency ?? 1)
       while (inFlight < concurrency && queue.length) {
         const rec = queue.shift()!
+        // Dequeue-time guard: a unit can be enqueued twice (IO callback +
+        // mutation re-scan) before the first measurement starts; the DOM
+        // state / terminal record of the first run must stop the duplicate.
+        const st = getState(rec.unit.blocks[0]!.el)
+        if (st === 'done' || st === 'measuring' || isTerminal(rec.state)) continue
         inFlight++
         measureAndRender(rec).finally(() => {
           inFlight--
@@ -214,10 +224,7 @@ export default defineContentScript({
       )
     }
 
-    async function measureAndRender(rec: {
-      state: MeasureState
-      unit: MeasurementUnit
-    }): Promise<void> {
+    async function measureAndRender(rec: UnitRecord): Promise<void> {
       const unit = rec.unit
       rec.state = transition(rec.state, { type: 'start' })
       for (const b of unit.blocks) {
@@ -226,7 +233,11 @@ export default defineContentScript({
         annotate.addLoading(b.el, settings!)
       }
       const m = await measureUnit(unit)
+      rec.measured = m
 
+      // ONE transition per unit (the record's), AFTER the block loop: a
+      // per-block transition would throw on the 2nd block (done + result) and
+      // leave the remaining blocks stuck in 'measuring' forever.
       const ai = isAI(m)
       for (let i = 0; i < unit.blocks.length; i++) {
         const b = unit.blocks[i]!
@@ -256,19 +267,20 @@ export default defineContentScript({
         if (m.error || m.avgPpl == null) {
           if (i === 0) annotate.addError(b.el)
           setState(b.el, 'error')
-          rec.state = transition(rec.state, { type: 'fail', code: 'unknown' })
         } else {
           if (b.text.length >= settings!.annotateThresholdChars) {
             annotate.addLabel(b.el, m.avgPpl, m.lang, settings!)
           }
           if (ai) annotate.markAI(b.el, settings!)
           setState(b.el, 'done')
-          rec.state = transition(rec.state, { type: 'result', avgPpl: m.avgPpl })
         }
       }
-      // Persist the outcome for the floating detail UI (same record the map holds).
-      const firstRec = records.get(unit.blocks[0]!.el)
-      if (firstRec) firstRec.measured = m
+      rec.state = transition(
+        rec.state,
+        m.error || m.avgPpl == null
+          ? { type: 'fail', code: 'unknown' }
+          : { type: 'result', avgPpl: m.avgPpl },
+      )
     }
 
     function isAI(m: Measured): boolean {
@@ -320,6 +332,9 @@ export default defineContentScript({
     function remeasureBlock(rec: UnitRecord): void {
       floating?.close()
       rec.measured = null
+      // The record is terminal (done/error) after the first run; reset it so
+      // enqueueUnit's terminal guard lets the explicit remeasure through.
+      rec.state = INITIAL_MEASURE_STATE
       for (const b of rec.unit.blocks) setState(b.el, 'pending')
       enqueueUnit(rec.unit)
     }
@@ -363,6 +378,9 @@ export default defineContentScript({
         if (initialSet.has(u)) enqueueUnit(u)
       }
       mo = startMutationWatch(() => {
+        // Prune records whose first block left the DOM (site re-rendered it);
+        // otherwise the map grows forever on SPA sites like Zhihu.
+        for (const el of records.keys()) if (!el.isConnected) records.delete(el)
         const cands = extractBlocks(document.body, settings!)
         if (!cands.length) return
         for (const u of groupUnits(cands, settings!)) {

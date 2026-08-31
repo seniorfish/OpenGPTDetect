@@ -2,7 +2,14 @@
 import { beforeAll, describe, it, expect } from 'vitest'
 import { BUILTIN_PROFILES } from '@opengptdetect/core'
 import { DEFAULT_SETTINGS } from '../src/lib/settings.ts'
-import { scan, groupUnits, getFlatText, type ScanOptions, type ScannedBlock } from '../src/lib/dom-scan.ts'
+import {
+  scan,
+  groupUnits,
+  getFlatText,
+  setState,
+  type ScanOptions,
+  type ScannedBlock,
+} from '../src/lib/dom-scan.ts'
 import { renderBlock } from '../src/lib/heatmap.ts'
 
 // jsdom's getBoundingClientRect is always 0x0, which `isHidden()` would read as
@@ -56,6 +63,18 @@ describe('dom-scan', () => {
     // raw = 'a  b\tc': the FIRST whitespace of each run is kept (space run -> 1,
     // the standalone tab starts its own run -> 4).
     expect(flat.nodes[0]!.rawMap).toEqual([0, 1, 3, 4, 5])
+  })
+
+  it('skips done/measuring/error blocks; remeasure (pending) re-includes them', () => {
+    document.body.innerHTML =
+      '<p id="a">alpha beta</p><p id="b">gamma delta</p><p id="c">epsilon zeta</p>'
+    setState(document.getElementById('a')!, 'done')
+    setState(document.getElementById('b')!, 'measuring')
+    setState(document.getElementById('c')!, 'error')
+    expect(scan(document.body, opts())).toEqual([])
+    // The explicit remeasure path resets the state to 'pending' -> candidate.
+    setState(document.getElementById('c')!, 'pending')
+    expect(scan(document.body, opts()).map((b) => b.el.id)).toEqual(['c'])
   })
 
   it('groups adjacent short paragraphs into one unit', () => {

@@ -200,7 +200,9 @@ export function scan(root: Element, opts: ScanOptions): ScannedBlock[] {
   let cur = walker.nextNode() as Element | null
   while (cur && n < maxBlocks) {
     const state = cur.getAttribute(STATE_ATTR)
-    if (state !== 'done' && state !== 'measuring') {
+    // 'error' blocks are skipped too: they were measured and failed; re-measure
+    // happens only via the explicit remeasure path (which resets to 'pending').
+    if (state !== 'done' && state !== 'measuring' && state !== 'error') {
       const text = getFlatText(cur).text
       if (charCount(text) >= Math.max(1, minChars)) {
         out.push({ el: cur as HTMLElement, text })

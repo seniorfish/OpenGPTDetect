@@ -33,9 +33,9 @@ export function Field({
   hint?: string
 }) {
   return (
-    <div className="grid grid-cols-[220px_1fr] items-center gap-4 py-2 text-sm">
+    <div className="grid grid-cols-1 items-center gap-2 py-2 text-sm sm:grid-cols-[220px_1fr] sm:gap-4">
       <span className="text-muted-foreground">{label}</span>
-      <div>
+      <div className="min-w-0">
         {children}
         {hint && <p className="mt-1 text-xs text-muted-foreground/70">{hint}</p>}
       </div>
@@ -163,7 +163,7 @@ export function SelectRow({
   return (
     <Field label={label} hint={hint}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-72">
+        <SelectTrigger className="w-full max-w-72">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

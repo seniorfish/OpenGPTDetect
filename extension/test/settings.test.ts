@@ -10,6 +10,7 @@ import {
   getSettings,
   migrateLegacyStorage,
   removeProfile,
+  setSettingsPatch,
   settingsItem,
   upsertProfile,
 } from '../src/lib/settings.ts'
@@ -25,7 +26,9 @@ describe('settings persistence', () => {
   })
 
   it('re-validates and falls back on corrupt values', async () => {
-    await browser.storage.local.set({ 'local:settings': { apiBaseUrl: 123, enabled: 'yes' } })
+    // Raw storage key is the driverKey ('settings'); the item key 'local:settings'
+    // is only the wxt-storage address, NOT the underlying storage key.
+    await browser.storage.local.set({ settings: { apiBaseUrl: 123, enabled: 'yes' } })
     expect((await getSettings()).apiBaseUrl).toBe('http://127.0.0.1:8000')
   })
 
@@ -35,13 +38,23 @@ describe('settings persistence', () => {
     expect((await getSettings()).apiBaseUrl).toBe('http://x')
   })
 
-  it('migrates v1 settings to v3 (scaleOverrides and locale added)', async () => {
+  it('migrates a v1 store to v4 (scaleOverrides, locale, adapters added)', async () => {
+    // A v1 store: no scaleOverrides/locale/adapters, scan params at the top level.
+    const { scaleOverrides: _s, locale: _l, adapters: _a, ...v1 } = DEFAULT_SETTINGS
     await browser.storage.local.set({
-      'local:settings': { ...DEFAULT_SETTINGS, scaleOverrides: undefined, locale: undefined },
+      settings: { ...v1, textBlockMode: 'article', minParagraphChars: 20, maxBlocksPerPage: 2000 },
     })
+    // Migrations run once at defineItem (module load, storage empty in tests);
+    // seed first, then run the item's own migrate() explicitly.
+    await settingsItem.migrate()
     const s = await getSettings()
     expect(s.scaleOverrides).toBeNull()
     expect(s.locale).toBe('auto')
+    expect(s.adapters.default?.config).toMatchObject({
+      textBlockMode: 'article',
+      minParagraphChars: 20,
+      maxBlocksPerPage: 2000,
+    })
   })
 
   it('rejects invalid scaleOverrides on read', async () => {
@@ -50,6 +63,91 @@ describe('settings persistence', () => {
       scaleOverrides: [{ ppl: -5, color: 'not-a-color' }],
     })
     expect((await getSettings()).scaleOverrides).toBeNull()
+  })
+})
+
+describe('adapter settings (v4)', () => {
+  it('defaults carry an empty adapters record and no top-level scan keys', () => {
+    expect(DEFAULT_SETTINGS.adapters).toEqual({})
+    expect('textBlockMode' in DEFAULT_SETTINGS).toBe(false)
+    expect('minParagraphChars' in DEFAULT_SETTINGS).toBe(false)
+    expect('maxBlocksPerPage' in DEFAULT_SETTINGS).toBe(false)
+  })
+
+  it('migrates v3 scan params into the default adapter config', async () => {
+    // A v3 store: current defaults minus adapters, scan params at the top level.
+    const { adapters: _a, ...v3 } = DEFAULT_SETTINGS
+    await browser.storage.local.set({
+      settings: { ...v3, textBlockMode: 'all', minParagraphChars: 30, maxBlocksPerPage: 500 },
+    })
+    await settingsItem.migrate()
+    const s = await getSettings()
+    expect(s.adapters.default?.config).toMatchObject({
+      textBlockMode: 'all',
+      minParagraphChars: 30,
+      maxBlocksPerPage: 500,
+    })
+    expect('textBlockMode' in s).toBe(false)
+  })
+
+  it('drops undefined scan params during migration instead of writing them', async () => {
+    const { adapters: _a, ...v3 } = DEFAULT_SETTINGS
+    await browser.storage.local.set({
+      settings: {
+        ...v3,
+        textBlockMode: 'all',
+        minParagraphChars: undefined,
+        maxBlocksPerPage: 500,
+      },
+    })
+    await settingsItem.migrate()
+    const s = await getSettings()
+    expect(s.adapters.default?.config).toEqual({ textBlockMode: 'all', maxBlocksPerPage: 500 })
+  })
+
+  it('round-trips a stored v4 adapters record untouched', async () => {
+    const adapters = {
+      zhihu: {
+        enabled: false,
+        priority: 10,
+        urlExclude: ['a.com'],
+        config: { includeComments: false },
+      },
+    }
+    await settingsItem.setValue({ ...DEFAULT_SETTINGS, adapters })
+    expect((await getSettings()).adapters).toEqual(adapters)
+  })
+
+  it('falls back to all defaults when the stored adapters record is corrupt', async () => {
+    await browser.storage.local.set({ settings: { ...DEFAULT_SETTINGS, adapters: 'garbage' } })
+    expect(await getSettings()).toEqual(DEFAULT_SETTINGS)
+  })
+
+  it('tolerates unknown adapter ids and unknown config keys', async () => {
+    await settingsItem.setValue({
+      ...DEFAULT_SETTINGS,
+      adapters: {
+        ghost: { enabled: false, config: { whatever: 'x' } },
+        default: { config: { minParagraphChars: 5 } },
+      },
+    })
+    const s = await getSettings()
+    expect(s.adapters.ghost?.enabled).toBe(false)
+    expect(s.adapters.default?.config?.minParagraphChars).toBe(5)
+  })
+
+  it('setSettingsPatch keeps sibling adapter entries when the caller spreads them', async () => {
+    await settingsItem.setValue({
+      ...DEFAULT_SETTINGS,
+      adapters: { default: { config: { minParagraphChars: 5 } } },
+    })
+    // setSettingsPatch is a SHALLOW merge: the caller (options page) must
+    // spread the existing adapters record, exactly as the adapters page does.
+    const cur = (await getSettings()).adapters
+    await setSettingsPatch({ adapters: { ...cur, zhihu: { enabled: false } } })
+    const s = await getSettings()
+    expect(s.adapters.default?.config?.minParagraphChars).toBe(5)
+    expect(s.adapters.zhihu?.enabled).toBe(false)
   })
 })
 
@@ -85,7 +183,8 @@ describe('legacy storage migration', () => {
     await migrateLegacyStorage()
     const s = await getSettings()
     expect(s.apiBaseUrl).toBe('http://legacy')
-    expect(s.textBlockMode).toBe('all')
+    // The legacy scan params land in the default adapter's config (v4 layout).
+    expect(s.adapters.default?.config?.textBlockMode).toBe('all')
     const leftover = await browser.storage.local.get(null)
     expect('apiBaseUrl' in leftover).toBe(false)
     expect('textBlockMode' in leftover).toBe(false)

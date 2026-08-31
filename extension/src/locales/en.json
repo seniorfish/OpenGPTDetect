@@ -38,6 +38,7 @@
   "options.nav.measure": "Measurement",
   "options.nav.ai": "AI detection",
   "options.nav.heatmap": "Heat map",
+  "options.nav.adapters": "Adapters",
   "options.nav.sites": "Site lists",
   "options.nav.about": "About",
 
@@ -51,6 +52,7 @@
 
   "options.section.general": "General",
   "options.section.extraction": "Text extraction",
+  "options.extraction.adapterHint": "Text block mode, min paragraph chars and max blocks per page moved to the default adapter:",
   "options.section.measure": "Measurement",
   "options.section.ai": "AI detection",
   "options.section.heatmap": "Heat map",
@@ -58,11 +60,8 @@
   "options.section.profile": "Colors & profiles",
   "options.section.about": "About",
 
-  "options.field.textBlockMode": "Text block mode",
-  "options.field.minParagraphChars": "Minimum paragraph chars",
   "options.field.mergeAdjacentShortParagraphs": "Merge short paragraphs",
   "options.field.mergeMaxGapChars": "Merge gap limit (chars)",
-  "options.field.maxBlocksPerPage": "Max measured blocks per page",
   "options.field.annotateThresholdChars": "Label threshold (chars)",
   "options.field.englishCharRatioThreshold": "English char ratio threshold",
   "options.field.maxCharsPerRequest": "Max chars per request",
@@ -84,8 +83,6 @@
   "options.field.listMode": "List mode",
   "options.field.whitelist": "Whitelist (one domain per line)",
   "options.field.blacklist": "Blacklist (one domain per line)",
-  "options.value.textBlockMode.article": "Article body (skip navigation)",
-  "options.value.textBlockMode.all": "All text blocks",
   "options.value.loadingIndicator.icon": "Icon ◌",
   "options.value.loadingIndicator.spinner": "Spinner ◌◌",
   "options.value.loadingIndicator.none": "None",

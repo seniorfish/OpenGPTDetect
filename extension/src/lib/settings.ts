@@ -12,6 +12,23 @@ import {
   type PplScaleProfile,
 } from '@opengptdetect/core'
 
+/**
+ * Per-adapter settings entry (sparse; defaults live in each adapter's
+ * configFields). Unknown adapter ids and unknown config keys are tolerated:
+ * zod's default strip + the engine's field lookup ignore them.
+ * NOTE: no `.strict()` here — getSettings() falls back all-or-nothing, so one
+ * unknown key must not reset every setting.
+ */
+export const AdapterSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  priority: z.number().int().optional(),
+  urlInclude: z.array(z.string()).optional(),
+  urlExclude: z.array(z.string()).optional(),
+  // zod v4: record requires two arguments.
+  config: z.record(z.string(), z.union([z.boolean(), z.number(), z.string()])).optional(),
+})
+export type AdapterSettings = z.infer<typeof AdapterSettingsSchema>
+
 export const ExtensionSettingsSchema = z.object({
   enabled: z.boolean(),
   shortcutEnabled: z.boolean(),
@@ -20,12 +37,9 @@ export const ExtensionSettingsSchema = z.object({
 
   apiBaseUrl: z.string(),
 
-  // Text-block detection
-  textBlockMode: z.enum(['article', 'all']),
-  minParagraphChars: z.number().int().min(0),
+  // Text-block merging (pipeline-level: groupUnits runs on every adapter's output)
   mergeAdjacentShortParagraphs: z.boolean(),
   mergeMaxGapChars: z.number().int().min(0),
-  maxBlocksPerPage: z.number().int().min(1),
 
   // Language detection
   englishCharRatioThreshold: z.number().min(0).max(1),
@@ -71,6 +85,9 @@ export const ExtensionSettingsSchema = z.object({
   listMode: z.enum(['off', 'blacklist', 'whitelist']),
   whitelist: z.array(z.string()),
   blacklist: z.array(z.string()),
+
+  // Per-adapter overrides; defaults live in each adapter's configFields.
+  adapters: z.record(z.string(), AdapterSettingsSchema),
 })
 export type ExtensionSettings = z.infer<typeof ExtensionSettingsSchema>
 
@@ -82,11 +99,8 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 
   apiBaseUrl: 'http://127.0.0.1:8000',
 
-  textBlockMode: 'article',
-  minParagraphChars: 20,
   mergeAdjacentShortParagraphs: true,
   mergeMaxGapChars: 60,
-  maxBlocksPerPage: 2000,
 
   englishCharRatioThreshold: 0.5,
 
@@ -119,16 +133,44 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   listMode: 'blacklist',
   whitelist: [],
   blacklist: [],
+
+  adapters: {},
 }
 
 export const settingsItem = storage.defineItem<ExtensionSettings>('local:settings', {
   fallback: DEFAULT_SETTINGS,
-  version: 3,
+  version: 4,
   migrations: {
     // v1 -> v2: add the profile color-stack override (none stored before S7).
     2: (old) => ({ ...old, scaleOverrides: null }),
     // v2 -> v3: add the UI language setting (defaults to browser detection).
     3: (old) => ({ ...old, locale: 'auto' }),
+    // v3 -> v4: the three generic-scan params become the default adapter's own config.
+    4: (old) => {
+      const src = old as Record<string, unknown>
+      const { textBlockMode, minParagraphChars, maxBlocksPerPage, ...rest } = src
+      // Filter to primitive values: keys absent from older stores arrive as
+      // undefined and must not enter the config record (would fail validation).
+      const moved: Record<string, boolean | number | string> = {}
+      for (const [k, v] of Object.entries({ textBlockMode, minParagraphChars, maxBlocksPerPage })) {
+        if (typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string') moved[k] = v
+      }
+      const entries =
+        typeof rest.adapters === 'object' && rest.adapters !== null
+          ? (rest.adapters as Record<string, unknown>)
+          : {}
+      const def =
+        typeof entries['default'] === 'object' && entries['default'] !== null
+          ? (entries['default'] as Record<string, unknown>)
+          : {}
+      return {
+        ...rest,
+        adapters: {
+          ...entries,
+          default: { ...def, config: { ...(def['config'] as object | undefined), ...moved } },
+        },
+      }
+    },
   },
 })
 
@@ -197,6 +239,17 @@ export async function migrateLegacyStorage(): Promise<void> {
   const allowed = Object.keys(DEFAULT_SETTINGS)
   for (const k of allowed) {
     if (k in probe && probe[k] != null) settings[k] = probe[k]
+  }
+  // The generic-scan params live in the default adapter's config since v4.
+  const scanConfig: Record<string, boolean | number | string> = {}
+  for (const k of ['textBlockMode', 'minParagraphChars', 'maxBlocksPerPage'] as const) {
+    const v = probe[k]
+    if (typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string') scanConfig[k] = v
+  }
+  if (Object.keys(scanConfig).length) {
+    const prev = (settings.adapters ?? {}) as Record<string, AdapterSettings>
+    const def = prev['default'] ?? {}
+    settings.adapters = { ...prev, default: { ...def, config: { ...def.config, ...scanConfig } } }
   }
   // The old color stacks are superseded by the built-in profiles (S7 removes these keys).
   const parsed = ExtensionSettingsSchema.safeParse(settings)

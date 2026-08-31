@@ -38,6 +38,7 @@
   "options.nav.measure": "测量",
   "options.nav.ai": "AI 识别",
   "options.nav.heatmap": "热力图",
+  "options.nav.adapters": "适配器",
   "options.nav.sites": "站点名单",
   "options.nav.about": "关于",
 
@@ -51,6 +52,7 @@
 
   "options.section.general": "通用",
   "options.section.extraction": "文本提取",
+  "options.extraction.adapterHint": "文本块模式、段落字数下限、每页最大块数已移至默认适配器：",
   "options.section.measure": "测量",
   "options.section.ai": "AI 识别",
   "options.section.heatmap": "热力图",
@@ -58,11 +60,8 @@
   "options.section.profile": "配色与 profile",
   "options.section.about": "关于",
 
-  "options.field.textBlockMode": "文本块模式",
-  "options.field.minParagraphChars": "段落字数下限",
   "options.field.mergeAdjacentShortParagraphs": "合并短段",
   "options.field.mergeMaxGapChars": "合并上限（字符）",
-  "options.field.maxBlocksPerPage": "每页最大测量块数",
   "options.field.annotateThresholdChars": "标注小字阈值（字符）",
   "options.field.englishCharRatioThreshold": "英文字符占比阈值",
   "options.field.maxCharsPerRequest": "单次请求最大字符",
@@ -84,8 +83,6 @@
   "options.field.listMode": "名单模式",
   "options.field.whitelist": "白名单（每行一个域名）",
   "options.field.blacklist": "黑名单（每行一个域名）",
-  "options.value.textBlockMode.article": "文章正文（自动忽略导航）",
-  "options.value.textBlockMode.all": "全部文本块",
   "options.value.loadingIndicator.icon": "图标 ◌",
   "options.value.loadingIndicator.spinner": "旋转 ◌◌",
   "options.value.loadingIndicator.none": "不显示",

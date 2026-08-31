@@ -11,6 +11,21 @@ import en from '../locales/en.json'
 export type LocaleSetting = 'auto' | 'zh' | 'en'
 export type SupportedLocale = 'zh' | 'en'
 
+/**
+ * A label declared inline by a plugin (site adapter) in both UI languages.
+ * These bypass the typed MessageKey system on purpose — adapters stay
+ * self-contained in one file; a runtime parity test guards zh/en coverage.
+ */
+export interface BilingualLabel {
+  zh: string
+  en: string
+}
+
+/** Pick the text for `locale`; falls back to the zh entry when blank. */
+export function pickLabel(locale: SupportedLocale, label: BilingualLabel): string {
+  return label[locale] || label.zh
+}
+
 /** Master message schema, derived from the Chinese locale resource. */
 export type MessageSchema = typeof zh
 export type MessageKey = keyof MessageSchema

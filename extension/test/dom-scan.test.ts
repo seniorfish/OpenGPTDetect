@@ -2,7 +2,7 @@
 import { beforeAll, describe, it, expect } from 'vitest'
 import { BUILTIN_PROFILES } from '@opengptdetect/core'
 import { DEFAULT_SETTINGS } from '../src/lib/settings.ts'
-import { scan, groupUnits, getFlatText, type ScannedBlock } from '../src/lib/dom-scan.ts'
+import { scan, groupUnits, getFlatText, type ScanOptions, type ScannedBlock } from '../src/lib/dom-scan.ts'
 import { renderBlock } from '../src/lib/heatmap.ts'
 
 // jsdom's getBoundingClientRect is always 0x0, which `isHidden()` would read as
@@ -29,6 +29,14 @@ const settings = (patch: Partial<typeof DEFAULT_SETTINGS> = {}): typeof DEFAULT_
   ...patch,
 })
 
+/** scan() now takes the default adapter's own config, not global settings. */
+const opts = (p: Partial<ScanOptions> = {}): ScanOptions => ({
+  textBlockMode: 'article',
+  minParagraphChars: 1,
+  maxBlocksPerPage: 2000,
+  ...p,
+})
+
 describe('dom-scan', () => {
   it('scans blocks, skips hidden/script, keeps document order', () => {
     document.body.innerHTML =
@@ -36,7 +44,7 @@ describe('dom-scan', () => {
       '<p id="b" hidden>skip me</p>' +
       '<script>const x = 1;</script>' +
       '<p id="c">third</p>'
-    const blocks = scan(document.body, settings({ minParagraphChars: 1 }))
+    const blocks = scan(document.body, opts())
     expect(blocks.map((b) => b.el.id)).toEqual(['a', 'c'])
     expect(blocks[0]!.text).toBe('Hello world, 这是一个测试段落！')
   })
@@ -55,7 +63,7 @@ describe('dom-scan', () => {
       '<p id="a">short one</p><p id="b">short two</p><p id="c">a long paragraph here</p>'
     // gap = 10: 'short one'/'short two' (9 chars) merge; 'a long...' (22) does not.
     const units = groupUnits(
-      scan(document.body, settings({ minParagraphChars: 1 })),
+      scan(document.body, opts()),
       settings({ mergeMaxGapChars: 10 }),
     )
     expect(units).toHaveLength(2)

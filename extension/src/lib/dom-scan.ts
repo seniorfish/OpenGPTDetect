@@ -42,6 +42,15 @@ const SKIP_TAGS = new Set([
   'ASIDE',
 ])
 
+export type TextBlockMode = 'article' | 'all'
+
+/** The only settings `scan()` needs — the default adapter's own config. */
+export interface ScanOptions {
+  textBlockMode: TextBlockMode
+  minParagraphChars: number
+  maxBlocksPerPage: number
+}
+
 export interface ScannedBlock {
   el: HTMLElement
   text: string
@@ -174,10 +183,10 @@ export function wordCount(text: string): number {
 }
 
 /** Scan the tree under `root` for candidate blocks (document order, deduped). */
-export function scan(root: Element, settings: ExtensionSettings): ScannedBlock[] {
-  const mode = settings.textBlockMode
-  const minChars = settings.minParagraphChars
-  const maxBlocks = settings.maxBlocksPerPage
+export function scan(root: Element, opts: ScanOptions): ScannedBlock[] {
+  const mode = opts.textBlockMode
+  const minChars = opts.minParagraphChars
+  const maxBlocks = opts.maxBlocksPerPage
   const out: ScannedBlock[] = []
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
     acceptNode(node) {

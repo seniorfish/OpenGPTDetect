@@ -3,6 +3,8 @@
 // how to render its control and which settings key it mutates. The rows consume
 // the `switch`/`select`/`input` primitives from @opengptdetect/ui so the whole
 // options page reads as one design system.
+// NOTE: BoolRow renders without the Field wrapper (switch rows are self
+// describing), so it has no `hint` slot.
 import type { ReactNode } from 'react'
 import {
   Input,
@@ -65,6 +67,7 @@ export function NumberRow({
   min,
   max,
   step = 1,
+  hint,
 }: {
   label: string
   value: number
@@ -72,9 +75,10 @@ export function NumberRow({
   min?: number
   max?: number
   step?: number
+  hint?: string
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <Input
         type="number"
         className="w-32"
@@ -96,14 +100,16 @@ export function TextRow({
   value,
   onChange,
   placeholder,
+  hint,
 }: {
   label: string
   value: string
   onChange: (next: string) => void
   placeholder?: string
+  hint?: string
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <Input
         className="w-full"
         value={value}
@@ -146,14 +152,16 @@ export function SelectRow({
   value,
   options,
   onChange,
+  hint,
 }: {
   label: string
   value: string
   options: Array<{ value: string; label: string }>
   onChange: (next: string) => void
+  hint?: string
 }) {
   return (
-    <Field label={label}>
+    <Field label={label} hint={hint}>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="w-72">
           <SelectValue />

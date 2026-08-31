@@ -16,6 +16,7 @@ import {
 import { initLocale, t, useI18n } from '@/lib/i18n.ts'
 import { GeneralPage } from './pages/general.tsx'
 import { ExtractionPage } from './pages/extraction.tsx'
+import { AdaptersPage } from './pages/adapters.tsx'
 import { MeasurePage } from './pages/measure.tsx'
 import { AiPage } from './pages/ai.tsx'
 import { HeatmapPage } from './pages/heatmap.tsx'
@@ -26,6 +27,7 @@ import { usePage, type PageId } from './use-page.ts'
 const NAV: Array<{ id: PageId; labelKey: Parameters<typeof t>[0] }> = [
   { id: 'general', labelKey: 'options.nav.general' },
   { id: 'extraction', labelKey: 'options.nav.extraction' },
+  { id: 'adapters', labelKey: 'options.nav.adapters' },
   { id: 'measure', labelKey: 'options.nav.measure' },
   { id: 'ai', labelKey: 'options.nav.ai' },
   { id: 'heatmap', labelKey: 'options.nav.heatmap' },
@@ -134,6 +136,7 @@ export default function App() {
 
           {page === 'general' && <GeneralPage settings={settings} patch={patch} />}
           {page === 'extraction' && <ExtractionPage settings={settings} patch={patch} />}
+          {page === 'adapters' && <AdaptersPage settings={settings} patch={patch} />}
           {page === 'measure' && <MeasurePage settings={settings} patch={patch} />}
           {page === 'ai' && <AiPage settings={settings} patch={patch} />}
           {page === 'heatmap' && (

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 export const PAGE_IDS = [
   'general',
   'extraction',
+  'adapters',
   'measure',
   'ai',
   'heatmap',

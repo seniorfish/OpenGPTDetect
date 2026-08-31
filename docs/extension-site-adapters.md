@@ -32,15 +32,50 @@ export interface SiteAdapterContext {
   url: URL // 当前板块(首页/文章/回答)靠它分流
   root: Element
   settings: ExtensionSettings
+  config: AdapterRuntimeConfig // 已解析的自有配置(见 §2.1)
 }
 
 export interface SiteAdapter {
   id: string
+  title?: BilingualLabel // 设置页卡片标题,缺省回退到 id
   matches(url: URL): boolean // 注册表按顺序取首个命中
+  configFields?: ReadonlyArray<AdapterConfigField> // 自有配置声明(见 §2.1)
   extract(ctx: SiteAdapterContext): ScannedBlock[] | null // null = 交给默认适配器
   exclude?(el: Element, url: URL): boolean // 后置过滤,对最终块列表一律生效
 }
 ```
+
+### 2.1 适配器自有配置(configFields)与通用控制
+
+适配器可以声明**自己的配置项**,设置页"适配器"页按声明通用渲染,存储于
+`settings.adapters[id]`,运行时解析后经 `ctx.config` 注入——适配器不需要理解
+全局 settings:
+
+```ts
+export interface AdapterConfigField {
+  key: string
+  kind: 'boolean' | 'number' | 'string' | 'select'
+  default: AdapterConfigFieldValue // 默认值单一事实源,兼作期望类型
+  label: BilingualLabel            // { zh, en } 内联双语,绕过类型化 i18n 键
+  hint?: BilingualLabel
+  options?: ReadonlyArray<{ value: string; label: BilingualLabel }> // select
+  min?: number; max?: number; step?: number
+}
+```
+
+- **存储形状**(稀疏,全部可选):`settings.adapters[id] = { enabled?, priority?,
+  urlInclude?, urlExclude?, config? }`;未知适配器 id / 未知 config 键容忍
+  (zod 默认 strip + 引擎按 configFields 过滤)。
+- **解析规则**(`adapterRuntimeConfig`):默认值来自 configFields,存储值类型与
+  `typeof f.default` 一致(select 还须命中 options)才采用,否则回退默认。
+- **通用控制**(`effectiveRegistry` / `adapterMatches`):`enabled`(默认适配器
+  不可禁用,恒最后兜底)、`priority`(升序稳定排序,默认 100,并列保持注册顺序)、
+  `urlInclude`/`urlExclude`(主机模式列表,与全局黑白名单同一套匹配语义,
+  见 `src/lib/url-match.ts`;exclude 命中即跳过该适配器,include 可拯救
+  `matches` 不命中的适配器;**永不抑制默认适配器兜底**)。
+- 默认适配器的 `configFields` 持有通用扫描启发式(textBlockMode /
+  minParagraphChars / maxBlocksPerPage,storage v4 从全局设置迁入);
+  合并/标注参数属测量管线,保持全局。
 
 - **默认适配器**(`src/lib/adapters/default.ts`)就是一位普通"适配器":`id: 'default'`,
   `matches: () => true`,extract 实现 = 通用启发式扫描(dom-scan 的 `scan`)。
@@ -92,7 +127,7 @@ export const ZHIHU: SiteAdapter = {
 }
 ```
 
-注册:在 `adapters.ts` 顶部 `import { ZHIHU } from './zhihu.ts'` 并 `ADAPTER_REGISTRY.unshift(ZHIHU)`。
+注册:在 `adapters/index.ts` 顶部 `import { ZHIHU } from './zhihu.ts'` 并 `ADAPTER_REGISTRY.unshift(ZHIHU)`。
 测量管线(状态机 / 分组 / 渲染)完全复用——适配器只回答"哪些元素是块、每块属于哪个单元"。
 
 ## 4. 适配器编写指南(checklist)
@@ -120,9 +155,9 @@ export const ZHIHU: SiteAdapter = {
 | 排除区(exclude,含 generic 回退)            | ✅ 接口,后置统一过滤                                     | 各站实现                                             |
 | 测量单元边界(unitBoundary)                 | ✅ 接口(dom-scan 合并尊重)                               | 各站实现                                             |
 | SPA 路由变化触发重扫                       | mutation watch(wxt 文档另有 `wxt:locationchange` 可监听) | 站点级 `onNavigate?` 钩子                            |
-| 每个站点一套参数(short merge/threshold 等) | settings 全局                                            | `SiteAdapter.overrides?: Partial<ExtensionSettings>` |
+| 每个站点一套参数                           | ✅ `configFields` 声明 + `ctx.config` 注入(§2.1);合并/标注参数保持管线级 | 各站按需声明字段                     |
 | 调试:高亮候选块 / 报告用了哪个适配器       | —                                                        | 设置页"调试"区块(可选)                               |
-| 用户自主开关适配器                         | —                                                        | settings 增 `adapters: { [id]: boolean }`            |
+| 用户自主开关适配器                         | ✅ `settings.adapters[id]`(enabled/priority/urlInclude/urlExclude/config)+ 设置页"适配器" | —                    |
 
 ## 6. 为什么不做成"全站规则引擎"
 

@@ -6,6 +6,20 @@ A local-LLM-powered **text perplexity (PPL)** analysis toolkit. It computes per-
 
 Backed by `llama.cpp` (`llama-cpp-python`); all inference runs on your own machine — text and results never leave it.
 
+## UI Preview
+
+The screenshot shows an English sample: the **first half of the text was written by a human, the second half was continued by an AI**.
+
+![Editor · English sample: the human-written half is mostly red/orange, the AI-continued half is mostly green](https://github.com/user-attachments/assets/397ffd63-62a3-4d3b-babd-e3b5550dbf72)
+
+**Reading the colors** (per-token highlighting follows the PPL color scale, a continuous gradient from red to green):
+
+- **Red = high PPL**: the model is "surprised" by the next token — typical of **human writing**
+- **Green = low PPL**: the model predicts it easily — typical of **AI-generated text**
+
+In the screenshot, the first half is mostly red/orange while the second half leans clearly green, so the human/AI boundary is easy to spot. The human-written part comes from the official sample of [Tencent's AI detection assistant (腾讯 AI 检测助手)](https://matrix.tencent.com/ai-detect/).
+
+**Editor features**: customizable colors, selection ignoring, per-token analysis, and more — with separate tuning for Chinese and English text.
 
 ## Components
 
